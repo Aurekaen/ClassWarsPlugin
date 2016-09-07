@@ -224,12 +224,21 @@ namespace ClassWars
             {
                 player.Teleport(arena.bSpawn.X, arena.bSpawn.Y);
             }
-            
+            Wiring.HitSwitch((int) arena.switchPos.X, (int) arena.switchPos.Y);
         }
         
-        private static void CheckWins()
+        public void CheckWins(int index)
         {
-
+            Arena arena = _arenas[index];
+            for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
+            {
+                for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
+                {
+                    int tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].blockType();
+                    if (tile == 25 ||tile == 203 || tile==117)
+                        if (Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].color)
+                }
+            }
         }
 
         private void gameEnd (bool winner)
