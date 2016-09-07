@@ -9,6 +9,7 @@ using Terraria.ID;
 using TerrariaApi.Server;
 using System.IO;
 using System.IO.Streams;
+using System.Threading;
 
 namespace ClassWars
 {
@@ -23,14 +24,14 @@ namespace ClassWars
 
         #region variables
         private static Database arena_db;
-        private static StatDatabase stat_db;
-        private static List<PlayerStat> _playerStats = new List<PlayerStat>();
+        //private static StatDatabase stat_db;
+        //private static List<PlayerStat> _playerStats = new List<PlayerStat>();
         private static List<Arena> _arenas = new List<Arena>();
         private static List<string> arenaNames = new List<string>();
         private string GameInProgress;
         private List<TSPlayer> redTeam;
         private List<TSPlayer> blueTeam;
-        private TSPlayer killer;
+        //private TSPlayer killer;
         public MemoryStream Data { get; private set; }
         internal delegate bool GetDataHandlerDelegate(GetDataHandlerArgs args);
         internal class GetDataHandlerArgs : EventArgs
@@ -57,23 +58,23 @@ namespace ClassWars
         public override void Initialize()
         {
             arena_db = Database.InitDb("CWArenas");
-            stat_db = StatDatabase.InitDb("PlayerStats");
+            //stat_db = StatDatabase.InitDb("PlayerStats");
             arena_db.LoadArenas(ref _arenas);
-            stat_db.LoadPlayerStats(ref _playerStats);
+            //stat_db.LoadPlayerStats(ref _playerStats);
             arenaNameReload();
             GameInProgress = "none";
-            ServerApi.Hooks.NetGetData.Register(this, onGetData);
+            //ServerApi.Hooks.NetGetData.Register(this, onGetData);
             ServerApi.Hooks.ServerLeave.Register(this, OnPlayerLeave);
             ServerApi.Hooks.GameUpdate.Register(this, onUpdate);
             Commands.ChatCommands.Add(new Command("cw.main", cw, "cw", "classwars"));
-            Commands.ChatCommands.Add(new Command("cw.stats", cwstats, "cwlog", "classwarslog", "cwstats", "classwarsstats"));
+            //Commands.ChatCommands.Add(new Command("cw.stats", cwstats, "cwlog", "classwarslog", "cwstats", "classwarsstats"));
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                ServerApi.Hooks.NetGetData.Deregister(this, onGetData);
+                //ServerApi.Hooks.NetGetData.Deregister(this, onGetData);
                 ServerApi.Hooks.ServerLeave.Deregister(this, OnPlayerLeave);
                 ServerApi.Hooks.GameUpdate.Deregister(this, onUpdate);
             }
@@ -92,7 +93,7 @@ namespace ClassWars
             }
         }
 
-        private static bool HandlePlayerKillMe(GetDataHandlerArgs args)
+        /*private static bool HandlePlayerKillMe(GetDataHandlerArgs args)
         {
             int index = args.Player.Index; //Attacking Player
             byte PlayerID = (byte)args.Data.ReadByte();
@@ -101,9 +102,9 @@ namespace ClassWars
             bool PVP = args.Data.ReadBoolean();
             var player = TShock.Players[index];
             return false;
-        }
+        }*/
 
-        private void onGetData(GetDataEventArgs args)
+        /*private void onGetData(GetDataEventArgs args)
         {
             PacketTypes type = args.MsgID;
             TSPlayer player = TShock.Players[args.Msg.whoAmI];
@@ -147,7 +148,7 @@ namespace ClassWars
                         killer = attackingPlayer;
                 }
             }
-        }
+        }*/
 
         private void onUpdate(EventArgs args)
         {
@@ -155,6 +156,7 @@ namespace ClassWars
             {
                 foreach (TSPlayer plr in redTeam)
                 {
+                    //Forces PVP for both teams for the duration of the game.
                     plr.TPlayer.hostile = true;
                     NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", plr.Index, 0f, 0f, 0f);
                 }
@@ -175,7 +177,7 @@ namespace ClassWars
             }
         }
 
-        private bool playerStatExists(string account)
+        /*private bool playerStatExists(string account)
         {
             if (_playerStats.Exists(delegate (PlayerStat player) { return player.account.ToLower() == account.ToLower(); }))
                 return true;
@@ -187,7 +189,8 @@ namespace ClassWars
         {
             int index = _playerStats.FindIndex(delegate (PlayerStat player) { return player.account.ToLower() == account; });
             return _playerStats[index];
-        }
+        }*/
+
         private void gameStart(int index)
         {
             if (GameInProgress != "none")
@@ -209,14 +212,35 @@ namespace ClassWars
                     blueTeam.Add(player);
                 }
             }
+            if (blueTeam.Count() != redTeam.Count())
+            {
+                TShock.Utils.Broadcast("Warning: Teams are not equal. " + blueTeam.Count() + " Blue Players vs " + redTeam.Count() + "Red Players", Color.Red);
+            }
             foreach (TSPlayer player in redTeam)
             {
                 player.Teleport(arena.rSpawn.X, arena.rSpawn.Y);
-            }
+            } 
             foreach (TSPlayer player in blueTeam)
             {
                 player.Teleport(arena.bSpawn.X, arena.bSpawn.Y);
             }
+            
+        }
+        
+        private static void CheckWins()
+        {
+
+        }
+
+        private void gameEnd (bool winner)
+        {
+            GameInProgress = "none";
+            redTeam.Clear();
+            blueTeam.Clear();
+            if (winner)
+                TShock.Utils.Broadcast("Red Team Wins!", Color.HotPink);
+            else
+                TShock.Utils.Broadcast("Blue Team Win!", Color.HotPink);
         }
 
         #region CommandParsing
@@ -525,6 +549,7 @@ namespace ClassWars
                 int index = _arenas.FindIndex(delegate (Arena arena) { return arena.name.ToLower() == GameInProgress; });
                 if (args.Parameters[0] == "red")
                 {
+                    player.TPlayer.team = 1;
                     redTeam.Add(player);
                     player.Teleport(_arenas[index].rSpawn.X, _arenas[index].rSpawn.Y);
                     player.SendMessage("You have joined the red team.", Color.LimeGreen);
@@ -532,6 +557,7 @@ namespace ClassWars
                 }
                 if (args.Parameters[0] == "blue")
                 {
+                    player.TPlayer.team = 3;
                     blueTeam.Add(player);
                     player.Teleport(_arenas[index].bSpawn.X, _arenas[index].bSpawn.Y);
                     player.SendMessage("You have joined the blue team.", Color.LimeGreen);
@@ -559,7 +585,7 @@ namespace ClassWars
             #endregion
         }
 
-        private void cwstats(CommandArgs args)
+        /*private void cwstats(CommandArgs args)
         {
             var player = args.Player;
             if (!playerStatExists(player.User.Name))
@@ -610,7 +636,7 @@ namespace ClassWars
             }
             player.SendErrorMessage("/cwstats <all|kills|deaths|KDA|gamesplayed|averagetime|time>");
             return;
-        }
+        }*/
         #endregion
     }
 }
