@@ -252,6 +252,18 @@ namespace ClassWars
                     blueTeam.Add(player);
                 }
             }
+            if (redTeam.Count() == 0)
+            {
+                TShock.Utils.Broadcast("Red team is empty.", Color.Red);
+                GameInProgress = "none";
+                return;
+            }
+            if (blueTeam.Count() == 0)
+            {
+                TShock.Utils.Broadcast("Blue team is empty.", Color.Red);
+                GameInProgress = "none";
+                return;
+            }
             if (blueTeam.Count() != redTeam.Count())
             {
                 TShock.Utils.Broadcast("Warning: Teams are not equal. " + blueTeam.Count() + " Blue Players vs " + redTeam.Count() + "Red Players", Color.Red);
