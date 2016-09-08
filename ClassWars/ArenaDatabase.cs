@@ -114,10 +114,10 @@ namespace ClassWars
         {
             var query =
                 string.Format(
-                    "UPDATE CWArenas SET Name = {0}, HostX = {1}, HostY = {2}, RedSpawnX = {3}, RedSpawnY = {4}, BlueSpawnX = {5}, BlueSpawnY = {6}, ArenaTopLeftX = {7}, ArenaTopLeftY = {8}, ArenaBottomRightX = {9}, ArenaBottomRightY = {10}, SwitchPosX = {11}, SwitchPosY = {12} WHERE ID = @0 ",
-                    update.name, update.host.X, update.host.Y, update.rSpawn.X, update.rSpawn.Y, update.bSpawn.X, update.bSpawn.Y, update.arenaTopL.X, update.arenaTopL.Y, update.arenaBottomR.X, update.arenaBottomR.Y, update.switchPos.X, update.switchPos.Y);
+                    "UPDATE CWArenas SET HostX = {0}, HostY = {1}, RedSpawnX = {2}, RedSpawnY = {3}, BlueSpawnX = {4}, BlueSpawnY = {5}, ArenaTopLeftX = {6}, ArenaTopLeftY = {7}, ArenaBottomRightX = {8}, ArenaBottomRightY = {9}, SwitchPosX = {10}, SwitchPosY = {11} WHERE Name = @0 ",
+                    update.host.X, update.host.Y, update.rSpawn.X, update.rSpawn.Y, update.bSpawn.X, update.bSpawn.Y, update.arenaTopL.X, update.arenaTopL.Y, update.arenaBottomR.X, update.arenaBottomR.Y, update.switchPos.X, update.switchPos.Y);
 
-            Query(query, update.id);
+            Query(query, update.name);
         }
 
         public void LoadArenas(ref List<Arena> list)

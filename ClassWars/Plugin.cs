@@ -13,14 +13,13 @@ using System.Threading;
 
 namespace ClassWars
 {
-    public class Plugin : TerrariaPlugin
+    [ApiVersion(1, 23)]
+    public class ClassWars : TerrariaPlugin
     {
-        #region details
         public override string Name { get { return "ClassWars"; } }
         public override string Author { get { return "Alec"; } }
         public override string Description { get { return "Automatic Class Wars hosting plugin."; } }
         public override Version Version { get { return new Version(1, 0, 0, 0); } }
-        #endregion
 
         #region variables
         public static Dictionary<string, int> Colors = new Dictionary<string, int>();
@@ -29,13 +28,13 @@ namespace ClassWars
         //private static List<PlayerStat> _playerStats = new List<PlayerStat>();
         private static List<Arena> _arenas = new List<Arena>();
         private static List<string> arenaNames = new List<string>();
-        private string GameInProgress;
-        private List<TSPlayer> redTeam;
-        private List<TSPlayer> blueTeam;
+        private string GameInProgress = "none";
+        private List<TSPlayer> redTeam = new List<TSPlayer>() { null };
+        private List<TSPlayer> blueTeam = new List<TSPlayer>() { null };
         public int redPaintID, bluePaintID, blueBunkerCount, redBunkerCount, arenaIndex;
         //private TSPlayer killer;
         #endregion
-        public Plugin(Main game) : base(game)
+        public ClassWars(Main game) : base(game)
         {
         }
 
@@ -98,16 +97,29 @@ namespace ClassWars
         {
             if (GameInProgress == "none")
                 return;
-            if (args.MsgID != PacketTypes.Tile)
-                return;
-            using (var data = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
-            {
-                int action = data.ReadByte();
-                if (action == 0)
+            if (args.MsgID == PacketTypes.Tile)
+                using (var data = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
                 {
-                    CheckWins();
+                    int action = data.ReadByte();
+                    if (action == 0)
+                    {
+                        CheckWins();
+                    }
+                }
+            if (args.MsgID == PacketTypes.PlayerSpawn)
+            {
+                if (redTeam.Contains(TShock.Players[args.Msg.whoAmI]))
+                {
+                    TShock.Players[args.Msg.whoAmI].Teleport(_arenas[arenaIndex].rSpawn.X * 16, _arenas[arenaIndex].rSpawn.Y * 16);
+                    return;
+                }
+                if (blueTeam.Contains(TShock.Players[args.Msg.whoAmI]))
+                {
+                    TShock.Players[args.Msg.whoAmI].Teleport(_arenas[arenaIndex].bSpawn.X * 16, _arenas[arenaIndex].bSpawn.Y * 16);
+                    return;
                 }
             }
+
         }
 
         private void OnPlayerLeave(LeaveEventArgs args)
@@ -220,24 +232,22 @@ namespace ClassWars
             return _playerStats[index];
         }*/
 
-        private void gameStart(int index)
+        #region gameHandling
+        private void gameStart()
         {
             if (GameInProgress != "none")
             {
                 return;
             }
-            Arena arena = _arenas[index];
-            arenaIndex = index;
+            Arena arena = _arenas[arenaIndex];
             GameInProgress = arena.name;
-            redTeam.Clear();
-            blueTeam.Clear();
             foreach (TSPlayer player in TShock.Players)
             {
-                if (player.Team == 1)
+                if (player.TPlayer.team == 1)
                 {
                     redTeam.Add(player);
                 }
-                if (player.Team == 3)
+                if (player.TPlayer.team == 3)
                 {
                     blueTeam.Add(player);
                 }
@@ -248,13 +258,13 @@ namespace ClassWars
             }
             foreach (TSPlayer player in redTeam)
             {
-                player.Teleport(arena.rSpawn.X, arena.rSpawn.Y);
+                player.Teleport(arena.rSpawn.X * 16, arena.rSpawn.Y * 16);
             } 
             foreach (TSPlayer player in blueTeam)
             {
-                player.Teleport(arena.bSpawn.X, arena.bSpawn.Y);
+                player.Teleport(arena.bSpawn.X * 16, arena.bSpawn.Y * 16);
             }
-            Wiring.HitSwitch((int) arena.switchPos.X, (int) arena.switchPos.Y);
+            Wiring.HitSwitch((int) arena.switchPos.X * 16, (int) arena.switchPos.Y * 16);
             Thread threadHandler = new Thread(threadHandle);
             threadHandler.Start();
         }
@@ -360,6 +370,7 @@ namespace ClassWars
             }
             Wiring.HitSwitch((int)arena.switchPos.X, (int)arena.switchPos.Y);
         }
+        #endregion
 
         #region CommandParsing
         private void cw(CommandArgs args)
@@ -374,7 +385,7 @@ namespace ClassWars
                 if (player.HasPermission("cw.add"))
                 {
                     player.SendErrorMessage("/cw add <arena>");
-                    player.SendErrorMessage("/cw set <arena> <host|redspawn|bluespawn|arenaTopLeft|arenaBottomRight|switch>");
+                    player.SendErrorMessage("/cw set <arena> <host|redspawn|bluespawn|arenabounds|switch>");
                 }
                 if (player.HasPermission("cw.del"))
                     player.SendErrorMessage("/cw del <arena>");
@@ -410,6 +421,7 @@ namespace ClassWars
                 arena_db.AddArena(arena);
                 _arenas.Add(arena);
                 arenaNameReload();
+                return;
             }
             #endregion
 
@@ -443,20 +455,16 @@ namespace ClassWars
                 }
                 arenaNames.RemoveAll(delegate (string s) { return s == name; });
                 arena_db.DeleteArenaByName(name);
-                bool arenaFound = false;
+                Arena temp = null;
                 foreach (Arena arena in _arenas)
                 {
                     if (arena.name == name)
                     {
-                        _arenas.Remove(arena);
-                        player.SendMessage("Arena " + arena.name + "removed.", Color.LimeGreen);
-                        arenaFound = true;
+                        temp = arena;
                     }
                 }
-                if (!arenaFound)
-                {
-                    player.SendErrorMessage("Please report error 01 to the plugin developer.");
-                }
+                _arenas.Remove(temp);
+                player.SendMessage("Arena " + temp.name + "removed.", Color.LimeGreen);
                 return;
             }
             #endregion
@@ -486,10 +494,11 @@ namespace ClassWars
                 if (!player.HasPermission("cw.add"))
                 {
                     player.SendErrorMessage("You do not have permission to do this.");
+                    return;
                 }
                 if (args.Parameters.Count < 2)
                 {
-                    player.SendErrorMessage("/cw set <arena> <host|redspawn|bluespawn|arenaTopLeft|arenaboundaries|switch>");
+                    player.SendErrorMessage("/cw set <arena> <host|redspawn|bluespawn|arenabounds|switch>");
                     return;
                 }
                 var arenaName = args.Parameters[0].ToLower();
@@ -500,37 +509,38 @@ namespace ClassWars
                 }
                 action = args.Parameters[1].ToLower();
                 args.Parameters.RemoveAt(0);
-                args.Parameters.RemoveAt(1);
+                args.Parameters.RemoveAt(0);
                 int index = _arenas.FindIndex(delegate (Arena arena) { return arena.name.ToLower() == arenaName; });
 
                 #region host
                 if (action == "host")
                 {
-                    _arenas[index].host = player.TPlayer.position;
+                    _arenas[index].host = new Vector2(args.Player.TileX, args.Player.TileY);
+                    arena_db.UpdateArena(_arenas[index]);
+                    player.SendMessage(_arenas[index].name + "host location set to your position.", Color.LimeGreen);
+                    return;
                 }
-                arena_db.UpdateArena(_arenas[index]);
-                player.SendMessage(_arenas[index].name + "host location set to your position.", Color.LimeGreen);
-                return;
+
                 #endregion
 
                 #region redspawn
                 if (action == "redspawn")
                 {
-                    _arenas[index].rSpawn = player.TPlayer.position;
+                    _arenas[index].rSpawn = new Vector2(args.Player.TileX, args.Player.TileY);
+                    arena_db.UpdateArena(_arenas[index]);
+                    player.SendMessage(_arenas[index].name + "red spawn location set to your position.", Color.LimeGreen);
+                    return;
                 }
-                arena_db.UpdateArena(_arenas[index]);
-                player.SendMessage(_arenas[index].name + "red spawn location set to your position.", Color.LimeGreen);
-                return;
                 #endregion
 
                 #region bluespawn
                 if (action == "bluespawn")
                 {
-                    _arenas[index].bSpawn = player.TPlayer.position;
+                    _arenas[index].bSpawn = new Vector2 (args.Player.TileX, args.Player.TileY);
+                    arena_db.UpdateArena(_arenas[index]);
+                    player.SendMessage(_arenas[index].name + "blue spawn location set to your position.", Color.LimeGreen);
+                    return;
                 }
-                arena_db.UpdateArena(_arenas[index]);
-                player.SendMessage(_arenas[index].name + "blue spawn location set to your position.", Color.LimeGreen);
-                return;
                 #endregion
 
                 #region arenaBoundaries
@@ -538,7 +548,7 @@ namespace ClassWars
                 {
                     if (args.Parameters.Count == 0)
                     {
-                        if (!player.TempPoints.Any(p => p == Point.Zero))
+                        if (!player.TempPoints.Any(p => p == Point.Zero && args.Parameters[0].ToLower() == "define"))
                         {
                             Vector2 topLeft = new Vector2((Math.Min(player.TempPoints[0].X, player.TempPoints[1].X)), (Math.Min(player.TempPoints[0].Y, player.TempPoints[1].Y)));
                             Vector2 bottomRight = new Vector2((Math.Max(player.TempPoints[0].X, player.TempPoints[1].X)), (Math.Max(player.TempPoints[0].Y, player.TempPoints[1].Y)));
@@ -551,8 +561,8 @@ namespace ClassWars
                         else
                         {
                             player.SendErrorMessage("Usage:");
-                            player.SendErrorMessage("/cw set arenabounds <1/2>");
-                            player.SendErrorMessage("/cw set arenabounds define");
+                            player.SendErrorMessage("/cw set [arena] arenabounds <1/2>");
+                            player.SendErrorMessage("/cw set [arena] arenabounds define");
                             return;
                         }
                     }
@@ -569,10 +579,10 @@ namespace ClassWars
                         return;
                     }
                     player.SendErrorMessage("Usage:");
-                    player.SendErrorMessage("/cw set arenaboundaries <1/2>");
+                    player.SendErrorMessage("/cw set [arena] arenaboundaries <1/2>");
                     player.SendErrorMessage("");
                     player.SendErrorMessage("Once your points are set:");
-                    player.SendErrorMessage("/cw set arenaboundaries");
+                    player.SendErrorMessage("/cw set [arena] arenaboundaries");
                     return;
                 }
                 #endregion
@@ -580,10 +590,12 @@ namespace ClassWars
                 #region switch
                 if (action == "switch")
                 {
-                    _arenas[index].switchPos = player.TPlayer.position;
+                    _arenas[index].bSpawn = new Vector2(args.Player.TileX, args.Player.TileY);
+                    arena_db.UpdateArena(_arenas[index]);
+                    player.SendMessage(_arenas[index].name + "Switch location set.", Color.LimeGreen);
+                    return;
                 }
-                arena_db.UpdateArena(_arenas[index]);
-                player.SendMessage(_arenas[index].name + "blue spawn location set to your position.", Color.LimeGreen);
+                player.SendErrorMessage("Invalid Action");
                 return;
                 #endregion
             }
@@ -608,7 +620,7 @@ namespace ClassWars
                     args.Parameters.RemoveAt(0);
                     int index = _arenas.FindIndex(delegate (Arena arena) { return arena.name.ToLower() == arenaName; });
 
-                    if (player.Teleport(_arenas[index].host.X, _arenas[index].host.Y))
+                    if (player.Teleport(_arenas[index].host.X * 16, _arenas[index].host.Y * 16))
                         player.SendMessage("You have been teleported to " + _arenas[index].name + ".", Color.LimeGreen);
                     else
                         player.SendErrorMessage("Teleport failed!");
@@ -632,7 +644,7 @@ namespace ClassWars
                         player.SendErrorMessage("Usage: /cw start <arena>");
                         return;
                     }
-                    var arenaName = args.Parameters[0].ToLower();
+                    string arenaName = args.Parameters[0].ToLower();
                     if (!arenaNames.Contains(arenaName))
                     {
                         player.SendErrorMessage("Arena " + arenaName + "not found.");
@@ -640,10 +652,50 @@ namespace ClassWars
                     }
                     args.Parameters.RemoveAt(0);
                     int index = _arenas.FindIndex(delegate (Arena arena) { return arena.name.ToLower() == arenaName; });
+                    arenaIndex = index;
                     if (GameInProgress == "none")
-                        gameStart(index);
+                        gameStart();
                     else
                         player.SendErrorMessage("Game already running!");
+                    return;
+                }
+            }
+            #endregion
+
+            #region stop
+            if (action == "stop")
+            {
+                if (player.HasPermission("cw.start"))
+                {
+                    GameInProgress = "none";
+                    redTeam.Clear();
+                    blueTeam.Clear();
+                    TShock.Utils.Broadcast("Game Aborted Early", Color.Red);
+                    Arena arena = _arenas[arenaIndex];
+                    for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
+                    {
+                        for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
+                        {
+                            int x = (int)arena.arenaTopL.X + i;
+                            int y = (int)arena.arenaTopL.Y + j;
+                            var tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j];
+                            if (tile.wallColor() == bluePaintID || tile.wallColor() == redPaintID)
+                            {
+                                if (tile.wall == 195)
+                                    tile.type = 203;
+                                if (tile.wall == 190)
+                                    tile.type = 25;
+                                if (tile.wall == 200)
+                                    tile.type = 117;
+                            }
+                        }
+                    }
+                    Wiring.HitSwitch((int)arena.switchPos.X, (int)arena.switchPos.Y);
+                    return;
+                }
+                else
+                {
+                    player.SendErrorMessage("You do not have permission to do this!");
                     return;
                 }
             }

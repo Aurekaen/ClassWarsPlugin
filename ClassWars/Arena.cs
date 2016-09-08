@@ -9,7 +9,6 @@
 //A Wild Edit Appeared!
         public Arena(string name, Vector2 host, Vector2 rSpawn, Vector2 bSpawn, Vector2 arenaTopL, Vector2 arenaBottomR, Vector2 switchPos)
         {
-            this.id = id;
             this.name = name;
             this.host = host;
             this.rSpawn = rSpawn;
