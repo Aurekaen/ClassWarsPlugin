@@ -104,7 +104,9 @@ namespace ClassWars
             {
                 int action = data.ReadByte();
                 if (action == 0)
+                {
                     CheckWins();
+                }
             }
         }
 
@@ -253,19 +255,17 @@ namespace ClassWars
                 player.Teleport(arena.bSpawn.X, arena.bSpawn.Y);
             }
             Wiring.HitSwitch((int) arena.switchPos.X, (int) arena.switchPos.Y);
-            cwBackgroundThread(index);
-        }
-
-        public void cwBackgroundThread(int arenaIndex)
-        {
             Thread threadHandler = new Thread(threadHandle);
+            threadHandler.Start();
         }
 
         public void threadHandle()
         {
-            Thread winThread = new Thread(ScoreUpdate);
+            Thread winThread = new Thread(ScoreUpdate);  
             for (;;)
             {
+                if (GameInProgress == "none")
+                    break;
                 winThread.Start();
                 Thread.Sleep(120000);
             }
@@ -292,8 +292,8 @@ namespace ClassWars
                     }
                 }
             }
-            TShock.Utils.Broadcast("Red team's bunker has " + redBunkerCount.ToString() + " blocks remaining.", Color.LimeGreen);
-            TShock.Utils.Broadcast("Blue team's bunker has " + blueBunkerCount.ToString() + " blocks remaining.", Color.LimeGreen);
+            TShock.Utils.Broadcast("Red team's bunker has " + redBunkerCount.ToString() + " blocks remaining.", Color.Purple);
+            TShock.Utils.Broadcast("Blue team's bunker has " + blueBunkerCount.ToString() + " blocks remaining.", Color.Purple);
         }
 
         public void CheckWins()
@@ -305,7 +305,7 @@ namespace ClassWars
             {
                 for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
                 {
-                    int tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].blockType();
+                    int tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].type;
                     int color;
                     if (tile == 25 || tile == 203 || tile == 117)
                     {
@@ -338,6 +338,27 @@ namespace ClassWars
                 TShock.Utils.Broadcast("Red Team Wins!", Color.HotPink);
             else
                 TShock.Utils.Broadcast("Blue Team Win!", Color.HotPink);
+
+            Arena arena = _arenas[arenaIndex];
+            for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
+            {
+                for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
+                {
+                    int x = (int)arena.arenaTopL.X + i;
+                    int y = (int)arena.arenaTopL.Y + j;
+                    var tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j];
+                    if (tile.wallColor() == bluePaintID || tile.wallColor() == redPaintID)
+                    {
+                        if (tile.wall == 195)
+                            tile.type = 203;
+                        if (tile.wall == 190)
+                            tile.type = 25;
+                        if (tile.wall == 200)
+                            tile.type = 117;
+                    }
+                }
+            }
+            Wiring.HitSwitch((int)arena.switchPos.X, (int)arena.switchPos.Y);
         }
 
         #region CommandParsing
