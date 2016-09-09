@@ -241,24 +241,26 @@ namespace ClassWars
             }
             Arena arena = _arenas[arenaIndex];
             GameInProgress = arena.name;
-            foreach (TSPlayer player in TShock.Players)
+            redTeam.Clear();
+            blueTeam.Clear();
+            foreach (TSPlayer player in TShock.Players.Where(player => player != null))
             {
-                if (player.TPlayer.team == 1)
+                if (Main.player[player.Index].team == 1)
                 {
                     redTeam.Add(player);
                 }
-                if (player.TPlayer.team == 3)
+                if (Main.player[player.Index].team == 3)
                 {
                     blueTeam.Add(player);
                 }
             }
-            if (redTeam.Count() == 0)
+            if (redTeam.Count() < 1)
             {
                 TShock.Utils.Broadcast("Red team is empty.", Color.Red);
                 GameInProgress = "none";
                 return;
             }
-            if (blueTeam.Count() == 0)
+            if (blueTeam.Count() < 1)
             {
                 TShock.Utils.Broadcast("Blue team is empty.", Color.Red);
                 GameInProgress = "none";
@@ -560,23 +562,20 @@ namespace ClassWars
                 {
                     if (args.Parameters.Count == 0)
                     {
-                        if (!player.TempPoints.Any(p => p == Point.Zero && args.Parameters[0].ToLower() == "define"))
-                        {
-                            Vector2 topLeft = new Vector2((Math.Min(player.TempPoints[0].X, player.TempPoints[1].X)), (Math.Min(player.TempPoints[0].Y, player.TempPoints[1].Y)));
-                            Vector2 bottomRight = new Vector2((Math.Max(player.TempPoints[0].X, player.TempPoints[1].X)), (Math.Max(player.TempPoints[0].Y, player.TempPoints[1].Y)));
-                            _arenas[index].arenaTopL = topLeft;
-                            _arenas[index].arenaBottomR = bottomRight;
-                            arena_db.UpdateArena(_arenas[index]);
-                            player.SendMessage("Arena boundaries defined.", Color.LimeGreen);
-                            return;
-                        }
-                        else
-                        {
-                            player.SendErrorMessage("Usage:");
-                            player.SendErrorMessage("/cw set [arena] arenabounds <1/2>");
-                            player.SendErrorMessage("/cw set [arena] arenabounds define");
-                            return;
-                        }
+                        player.SendErrorMessage("Usage:");
+                        player.SendErrorMessage("/cw set [arena] arenabounds <1/2>");
+                        player.SendErrorMessage("/cw set [arena] arenabounds define");
+                        return;
+                    }
+                    if (args.Parameters[0].ToLower() == "define")
+                    {
+                        Vector2 topLeft = new Vector2((Math.Min(player.TempPoints[0].X, player.TempPoints[1].X)), (Math.Min(player.TempPoints[0].Y, player.TempPoints[1].Y)));
+                        Vector2 bottomRight = new Vector2((Math.Max(player.TempPoints[0].X, player.TempPoints[1].X)), (Math.Max(player.TempPoints[0].Y, player.TempPoints[1].Y)));
+                        _arenas[index].arenaTopL = topLeft;
+                        _arenas[index].arenaBottomR = bottomRight;
+                        arena_db.UpdateArena(_arenas[index]);
+                        player.SendMessage("Arena boundaries defined.", Color.LimeGreen);
+                        return;
                     }
                     if (args.Parameters[0] == "1")
                     {
@@ -602,7 +601,7 @@ namespace ClassWars
                 #region switch
                 if (action == "switch")
                 {
-                    _arenas[index].bSpawn = new Vector2(args.Player.TileX, args.Player.TileY);
+                    _arenas[index].switchPos = new Vector2(args.Player.TileX, args.Player.TileY);
                     arena_db.UpdateArena(_arenas[index]);
                     player.SendMessage(_arenas[index].name + "Switch location set.", Color.LimeGreen);
                     return;
