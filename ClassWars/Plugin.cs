@@ -247,11 +247,17 @@ namespace ClassWars
             {
                 if (Main.player[player.Index].team == 1)
                 {
-                    redTeam.Add(player);
+                    if (redTeam == null)
+                        redTeam = new List<TSPlayer> { player };
+                    else
+                        redTeam.Add(player);
                 }
                 if (Main.player[player.Index].team == 3)
                 {
-                    blueTeam.Add(player);
+                    if (blueTeam == null)
+                        blueTeam = new List<TSPlayer> { player };
+                    else
+                        blueTeam.Add(player);
                 }
             }
             if (redTeam.Count() < 1)
@@ -291,6 +297,7 @@ namespace ClassWars
                 if (GameInProgress == "none")
                     break;
                 winThread.Start();
+                winThread.Join();
                 Thread.Sleep(120000);
             }
         }
@@ -678,6 +685,11 @@ namespace ClassWars
             {
                 if (player.HasPermission("cw.start"))
                 {
+                    if (GameInProgress == "none")
+                    {
+                        player.SendErrorMessage("No game currently running.");
+                        return;
+                    }
                     GameInProgress = "none";
                     redTeam.Clear();
                     blueTeam.Clear();
