@@ -10,6 +10,7 @@ using TerrariaApi.Server;
 using System.IO;
 using System.IO.Streams;
 using System.Threading;
+using System.Timers;
 
 namespace ClassWars
 {
@@ -32,6 +33,9 @@ namespace ClassWars
         private List<TSPlayer> redTeam = new List<TSPlayer>() { null };
         private List<TSPlayer> blueTeam = new List<TSPlayer>() { null };
         public int redPaintID, bluePaintID, blueBunkerCount, redBunkerCount, arenaIndex;
+        public static System.Timers.Timer scoreCheck = new System.Timers.Timer { Interval = 120000, AutoReset = true, Enabled = false};
+        public static System.Timers.Timer countdown = new System.Timers.Timer { Interval = 1000, AutoReset = true, Enabled = false };
+        private int count;
         //private TSPlayer killer;
         #endregion
         public ClassWars(Main game) : base(game)
@@ -50,6 +54,8 @@ namespace ClassWars
             ServerApi.Hooks.ServerLeave.Register(this, OnPlayerLeave);
             ServerApi.Hooks.GameUpdate.Register(this, onUpdate);
             Commands.ChatCommands.Add(new Command("cw.main", cw, "cw", "classwars"));
+            scoreCheck.Elapsed += ScoreUpdate;
+            countdown.Elapsed += startCountdown;
             //Commands.ChatCommands.Add(new Command("cw.stats", cwstats, "cwlog", "classwarslog", "cwstats", "classwarsstats"));
 
             Colors.Add("blank", 0);
@@ -111,11 +117,13 @@ namespace ClassWars
                 if (redTeam.Contains(TShock.Players[args.Msg.whoAmI]))
                 {
                     TShock.Players[args.Msg.whoAmI].Teleport(_arenas[arenaIndex].rSpawn.X * 16, _arenas[arenaIndex].rSpawn.Y * 16);
+                    TShock.Players[args.Msg.whoAmI].Heal(600);
                     return;
                 }
                 if (blueTeam.Contains(TShock.Players[args.Msg.whoAmI]))
                 {
                     TShock.Players[args.Msg.whoAmI].Teleport(_arenas[arenaIndex].bSpawn.X * 16, _arenas[arenaIndex].bSpawn.Y * 16);
+                    TShock.Players[args.Msg.whoAmI].Heal(600);
                     return;
                 }
             }
@@ -284,25 +292,33 @@ namespace ClassWars
             {
                 player.Teleport(arena.bSpawn.X * 16, arena.bSpawn.Y * 16);
             }
-            Wiring.HitSwitch((int) arena.switchPos.X * 16, (int) arena.switchPos.Y * 16);
-            Thread threadHandler = new Thread(threadHandle);
-            threadHandler.Start();
+            count = 5;
+            countdown.Enabled = true;
+            scoreCheck.Enabled = true;
         }
 
-        public void threadHandle()
+        public void startCountdown(object sender, ElapsedEventArgs e)
         {
-            Thread winThread = new Thread(ScoreUpdate);  
-            for (;;)
+            Arena arena = _arenas[arenaIndex];
+            TShock.Utils.Broadcast("CW Game starting in: " + count.ToString(), Color.Yellow);
+            count--;
+            if (count == 0)
             {
-                if (GameInProgress == "none")
-                    break;
-                winThread.Start();
-                winThread.Join();
-                Thread.Sleep(120000);
+                TShock.Utils.Broadcast("LET THE GAMES BEGIN!", Color.Yellow);
+                countdown.Enabled = false;
+                return;
+            }
+            foreach (TSPlayer player in redTeam)
+            {
+                player.Teleport(arena.rSpawn.X * 16, arena.rSpawn.Y * 16);
+            }
+            foreach (TSPlayer player in blueTeam)
+            {
+                player.Teleport(arena.bSpawn.X * 16, arena.bSpawn.Y * 16);
             }
         }
 
-        public void ScoreUpdate()
+        public void ScoreUpdate(object sender, ElapsedEventArgs e)
         {
             Arena arena = _arenas[arenaIndex];
             blueBunkerCount = 0;
@@ -311,20 +327,20 @@ namespace ClassWars
             {
                 for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
                 {
-                    int tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].blockType();
+                    int tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].type;
                     int color;
                     if (tile == 25 || tile == 203 || tile == 117)
                     {
                         color = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].wallColor();
                         if (color == bluePaintID)
-                            blueBunkerCount += 1;
+                            blueBunkerCount = blueBunkerCount + 1;
                         if (color == redPaintID)
-                            redBunkerCount += 1;
+                            redBunkerCount = redBunkerCount + 1;
                     }
                 }
             }
-            TShock.Utils.Broadcast("Red team's bunker has " + redBunkerCount.ToString() + " blocks remaining.", Color.Purple);
-            TShock.Utils.Broadcast("Blue team's bunker has " + blueBunkerCount.ToString() + " blocks remaining.", Color.Purple);
+            TShock.Utils.Broadcast("Red team's bunker has " + redBunkerCount.ToString() + " blocks remaining.", Color.Red);
+            TShock.Utils.Broadcast("Blue team's bunker has " + blueBunkerCount.ToString() + " blocks remaining.", Color.LightBlue);
         }
 
         public void CheckWins()
@@ -342,9 +358,9 @@ namespace ClassWars
                     {
                         color = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].wallColor();
                         if (color == bluePaintID)
-                            blueBunkerCount += 1;
+                            blueBunkerCount = 1;
                         if (color == redPaintID)
-                            redBunkerCount += 1;
+                            redBunkerCount = 1;
                     }
                 }
             }
@@ -362,34 +378,28 @@ namespace ClassWars
 
         private void gameEnd (bool winner)
         {
+            Arena arena = _arenas[arenaIndex];
             GameInProgress = "none";
+            scoreCheck.Enabled = false;
+            foreach (TSPlayer player in redTeam)
+            {
+                player.Teleport(4374 * 16, 240 * 16);
+                player.TPlayer.hostile = false;
+                NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", player.Index, 0f, 0f, 0f);
+            }
+            foreach (TSPlayer player in blueTeam)
+            {
+                player.Teleport(4374 * 16, 240 * 16);
+                player.TPlayer.hostile = false;
+                NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", player.Index, 0f, 0f, 0f);
+            }
             redTeam.Clear();
             blueTeam.Clear();
             if (winner)
                 TShock.Utils.Broadcast("Red Team Wins!", Color.HotPink);
             else
                 TShock.Utils.Broadcast("Blue Team Win!", Color.HotPink);
-
-            Arena arena = _arenas[arenaIndex];
-            for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
-            {
-                for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
-                {
-                    int x = (int)arena.arenaTopL.X + i;
-                    int y = (int)arena.arenaTopL.Y + j;
-                    var tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j];
-                    if (tile.wallColor() == bluePaintID || tile.wallColor() == redPaintID)
-                    {
-                        if (tile.wall == 195)
-                            tile.type = 203;
-                        if (tile.wall == 190)
-                            tile.type = 25;
-                        if (tile.wall == 200)
-                            tile.type = 117;
-                    }
-                }
-            }
-            Wiring.HitSwitch((int)arena.switchPos.X, (int)arena.switchPos.Y);
+            Commands.HandleCommand(TSPlayer.Server, "/refill");
         }
         #endregion
 
@@ -768,7 +778,7 @@ namespace ClassWars
                     player.SendErrorMessage("No game running!");
                     return;
                 }
-                ScoreUpdate();
+                ScoreUpdate(null, null);
                 return;
             }
             #endregion
