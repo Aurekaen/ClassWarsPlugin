@@ -441,16 +441,21 @@ namespace ClassWars
             }
             redTeam.Clear();
             blueTeam.Clear();
-            TShock.Utils.Broadcast("=====================", Color.HotPink);
+            Color winningTeam = new Color();
             if (winner)
-                TShock.Utils.Broadcast("Red Team Wins!", Color.HotPink);
+                winningTeam = Color.HotPink;
             else
-                TShock.Utils.Broadcast("Blue Team Win!", Color.HotPink);
-            TShock.Utils.Broadcast("=====================", Color.HotPink);
-            TShock.Utils.Broadcast("Red Team Deaths: " + redDeathCount.ToString(), Color.HotPink);
-            TShock.Utils.Broadcast("Blue Team Deaths: " + blueDeathCount.ToString(), Color.HotPink);
-            TShock.Utils.Broadcast("Total Game Time: " + elapsed.Hours + " Hours, " + elapsed.Minutes + " Minutes, " + elapsed.Seconds+ " Seconds.", Color.HotPink);
-            TShock.Utils.Broadcast("=====================", Color.HotPink);
+                winningTeam = Color.LightBlue;
+            TShock.Utils.Broadcast("=====================", winningTeam);
+            if (winner)
+                TShock.Utils.Broadcast("Red Team Wins!", winningTeam);
+            else
+                TShock.Utils.Broadcast("Blue Team Win!", winningTeam);
+            TShock.Utils.Broadcast("=====================", winningTeam);
+            TShock.Utils.Broadcast("Red Team Deaths: " + redDeathCount.ToString(), winningTeam);
+            TShock.Utils.Broadcast("Blue Team Deaths: " + blueDeathCount.ToString(), winningTeam);
+            TShock.Utils.Broadcast("Total Game Time: " + elapsed.Hours + " Hours, " + elapsed.Minutes + " Minutes, " + elapsed.Seconds+ " Seconds.", winningTeam);
+            TShock.Utils.Broadcast("=====================", winningTeam);
             Commands.HandleCommand(TSPlayer.Server, "/refill");
         }
         #endregion
