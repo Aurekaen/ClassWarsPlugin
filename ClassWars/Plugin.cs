@@ -8,14 +8,16 @@ using Terraria;
 using Terraria.ID;
 using TerrariaApi.Server;
 using System.IO;
+using OTAPI;
 using System.IO.Streams;
 using System.Threading;
 using System.Timers;
 using System.Diagnostics;
+using Microsoft.Xna.Framework;
 
 namespace ClassWars
 {
-    [ApiVersion(1, 23)]
+    [ApiVersion(2, 0)]
     public class ClassWars : TerrariaPlugin
     {
         public override string Name { get { return "ClassWars"; } }
@@ -26,8 +28,8 @@ namespace ClassWars
         #region variables
         public static Dictionary<string, int> Colors = new Dictionary<string, int>();
         private static Database arena_db;
-        //private static StatDatabase stat_db;
-        //private static List<PlayerStat> _playerStats = new List<PlayerStat>();
+        private static ClassDatabase class_db;
+        private static List<Classvar> classes = new List<Classvar>();
         private static List<Arena> _arenas = new List<Arena>();
         private static List<string> arenaNames = new List<string>();
         private string GameInProgress = "none";
@@ -38,7 +40,6 @@ namespace ClassWars
         public static System.Timers.Timer countdown = new System.Timers.Timer { Interval = 1000, AutoReset = true, Enabled = false };
         private int count, redDeathCount, blueDeathCount;
         public DateTime start, end;
-        //private TSPlayer killer;
         #endregion
         public ClassWars(Main game) : base(game)
         {
@@ -48,18 +49,18 @@ namespace ClassWars
         public override void Initialize()
         {
             arena_db = Database.InitDb("CWArenas");
-            //stat_db = StatDatabase.InitDb("PlayerStats");
             arena_db.LoadArenas(ref _arenas);
-            //stat_db.LoadPlayerStats(ref _playerStats);
+            class_db = ClassDatabase.InitDb("Classes");
+            class_db.LoadClasses(ref classes);
             arenaNameReload();
             GameInProgress = "none";
             ServerApi.Hooks.NetGetData.Register(this, onGetData);
             ServerApi.Hooks.ServerLeave.Register(this, OnPlayerLeave);
             ServerApi.Hooks.GameUpdate.Register(this, onUpdate);
             Commands.ChatCommands.Add(new Command("cw.main", cw, "cw", "classwars"));
+            Commands.ChatCommands.Add(new Command("CS.main", cselect, "class", "cs"));
             scoreCheck.Elapsed += ScoreUpdate;
             countdown.Elapsed += startCountdown;
-            //Commands.ChatCommands.Add(new Command("cw.stats", cwstats, "cwlog", "classwarslog", "cwstats", "classwarsstats"));
 
             Colors.Add("blank", 0);
 
@@ -176,63 +177,6 @@ namespace ClassWars
             }
         }
 
-        /*private static bool HandlePlayerKillMe(GetDataHandlerArgs args)
-        {
-            int index = args.Player.Index; //Attacking Player
-            byte PlayerID = (byte)args.Data.ReadByte();
-            byte hitDirection = (byte)args.Data.ReadByte();
-            Int16 Damage = (Int16)args.Data.ReadInt16();
-            bool PVP = args.Data.ReadBoolean();
-            var player = TShock.Players[index];
-            return false;
-        }*/
-
-        /*private void onGetData(GetDataEventArgs args)
-        {
-            PacketTypes type = args.MsgID;
-            TSPlayer player = TShock.Players[args.Msg.whoAmI];
-            if (player == null)
-                return;
-            if (!player.ConnectionAlive)
-                return;
-            if ((!redTeam.Contains(player)) && (!blueTeam.Contains(player)))
-                return;
-            if (type == PacketTypes.PlayerKillMe)
-            {
-                using (var data = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
-                {
-                    int index = player.Index; //Attacking Player
-                    byte PlayerID = (byte)data.ReadByte();
-                    byte hitDirection = (byte)data.ReadByte();
-                    Int16 Damage = (Int16)data.ReadInt16();
-                    bool PVP = data.ReadBoolean();
-                    int plrLoc = _playerStats.FindIndex(delegate (PlayerStat plr) { return plr.account.ToLower() == TShock.Players[index].User.Name.ToLower(); });
-                    int klrLoc = _playerStats.FindIndex(delegate (PlayerStat plr) { return plr.account.ToLower() == TShock.Players[PlayerID].User.Name.ToLower(); });
-                    if (index != PlayerID)
-                    {
-                        _playerStats[plrLoc].deaths = _playerStats[plrLoc].deaths + 1;
-                        _playerStats[klrLoc].kills = _playerStats[plrLoc].kills + 1;
-                    }
-
-                }
-            }
-            else if (type == PacketTypes.PlayerDamage)
-            {
-                using (var data = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
-                {
-                    int index = player.Index; //Attacking Player
-                    byte PlayerID = (byte)data.ReadByte();
-                    byte hitDirection = (byte)data.ReadByte();
-                    Int16 damage = data.ReadInt16();
-                    var attackingPlayer = TShock.Players[index];
-                    bool PVP = data.ReadBoolean();
-                    byte crit = (byte)data.ReadByte();
-                    if ((redTeam.Contains(player)) || (blueTeam.Contains(player)))
-                        killer = attackingPlayer;
-                }
-            }
-        }*/
-
         private void onUpdate(EventArgs args)
         {
             if (GameInProgress != "none")
@@ -260,19 +204,17 @@ namespace ClassWars
             }
         }
 
-        /*private bool playerStatExists(string account)
+        #region classHandling
+        public void setclass(TSPlayer player, string className)
         {
-            if (_playerStats.Exists(delegate (PlayerStat player) { return player.account.ToLower() == account.ToLower(); }))
-                return true;
-            else
-                return false;
+
         }
 
-        private PlayerStat getStats(string account)
+        public void previewclass(TSPlayer player, string className)
         {
-            int index = _playerStats.FindIndex(delegate (PlayerStat player) { return player.account.ToLower() == account; });
-            return _playerStats[index];
-        }*/
+
+        }
+        #endregion
 
         #region gameHandling
         private void gameStart()
@@ -857,58 +799,402 @@ namespace ClassWars
             #endregion
         }
 
-        /*private void cwstats(CommandArgs args)
+        private void cselect(CommandArgs args)
         {
-            var player = args.Player;
-            if (!playerStatExists(player.User.Name))
+            TSPlayer player = args.Player;
+
+            #region help
+            if (args.Parameters.Count == 0 || (args.Parameters[0] == "help" && (args.Parameters.Count != 2 || args.Parameters[1] != "admin")))
             {
-                player.SendErrorMessage("No stats for this account");
+                player.SendErrorMessage("Usage: /class select [name]");
+                player.SendErrorMessage("/class list [category]");
+                player.SendErrorMessage("/class preview [name]");
+                player.SendErrorMessage("/class desc [name]");
+                if (player.HasPermission("CS.admin"))
+                {
+                    player.SendErrorMessage("/class help admin");
+                }
                 return;
             }
-            var playerstat = getStats(player.User.Name);
-            if ((args.Parameters.Count == 0) || (args.Parameters[1] == "all"))
+            if (args.Parameters[0] == "help" && args.Parameters[1] == "admin")
             {
-                player.SendMessage("Statistics for " + player.User.Name + ":", Color.LimeGreen);
-                player.SendMessage("KDA: " + playerstat.kda().ToString(), Color.LimeGreen);
-                player.SendMessage("Win/Loss: " + playerstat.winLossRatio().ToString(), Color.LimeGreen);
-                player.SendMessage("Games Played: " + playerstat.gamesCompleted, Color.LimeGreen);
-                player.SendMessage("Average Game Time: " + playerstat.averageGameTime().ToString(), Color.LimeGreen);
+                if (player.HasPermission("CS.admin"))
+                {
+                    player.SendErrorMessage("/class add [name]");
+                    player.SendErrorMessage("/class set [name] [category|desc|inv|stats]");
+                    player.SendErrorMessage("/class del [name]");
+                    player.SendErrorMessage("/class buff [add|del] [name] [buff] [duration]");
+                    player.SendErrorMessage("/class itembuff [add|del] [name] [buff] [duration]");
+                    player.SendErrorMessage("/class ammo [add|del] [name] [refresh time]");
+                }
+                else
+                {
+                    player.SendErrorMessage("You do not have permission to manage classes");
+                }
                 return;
             }
-            var stat = args.Parameters[0].ToLower();
-            if (stat == "kills")
+            #endregion
+
+            string param = args.Parameters[0].ToLower();
+            args.Parameters.RemoveAt(0);
+
+            if (param == "select")
             {
-                player.SendMessage("Kills: " + playerstat.kills, Color.LimeGreen);
+                if (args.Parameters.Count == 0)
+                {
+                    player.SendErrorMessage("Usage: /class select [name]");
+                    return;
+                }
+                setclass(player, args.Parameters[0]);
                 return;
             }
-            if (stat == "deaths")
+
+            if (param == "list")
             {
-                player.SendMessage("Deaths: " + playerstat.deaths, Color.LimeGreen);
+                List<Classvar> temp = new List<Classvar>();
+                List<string> categories = new List<string>();
+                int pagenum;
+                foreach (Classvar c in classes)
+                {
+                    if (!categories.Contains(c.category))
+                        categories.Add(c.category);
+                } 
+                if (args.Parameters.Count > 0)
+                {
+                    if (args.Parameters[0] == "category" || args.Parameters[0] == "categories")
+                    {
+                        if (!PaginationTools.TryParsePageNumber(args.Parameters, 1, args.Player, out pagenum))
+                            return;
+                        IEnumerable<string> catList = categories;
+                        PaginationTools.SendPage(player, pagenum, PaginationTools.BuildLinesFromTerms(catList),
+                            new PaginationTools.Settings
+                            {
+                                HeaderFormat = "Class Wars Class Categories:",
+                                FooterFormat = "type /class list {{0}}",
+                                NothingToDisplayString = "No classes are presently defined."
+                            });
+                        return;
+                    }
+                    if (categories.Contains(args.Parameters[0]))
+                    {
+                        foreach(Classvar c in classes)
+                        {
+                            if (c.category == args.Parameters[0])
+                                temp.Add(c);
+                        }
+                        if (!PaginationTools.TryParsePageNumber(args.Parameters, 0, args.Player, out pagenum))
+                            return;
+                        IEnumerable<string> classList = from Classvar in temp
+                                                        select Classvar.name;
+                        PaginationTools.SendPage(player, pagenum, PaginationTools.BuildLinesFromTerms(classList),
+                            new PaginationTools.Settings
+                            {
+                                HeaderFormat = "Classes in Category \"" + args.Parameters[0] + "\" :",
+                                FooterFormat = "type /class list " + args.Parameters[0] + " {{0}}",
+                                NothingToDisplayString = "No classes in this category are presently defined."
+                            });
+                        return;
+                    }
+                }
+                if (!PaginationTools.TryParsePageNumber(args.Parameters, 0, args.Player, out pagenum))
+                    return;
+                IEnumerable<string> classesList = from Classvar in classes
+                                                select Classvar.name;
+                PaginationTools.SendPage(player, pagenum, PaginationTools.BuildLinesFromTerms(classesList),
+                    new PaginationTools.Settings
+                    {
+                        HeaderFormat = "Class Wars Classes:",
+                        FooterFormat = "type /class list {{0}}",
+                        NothingToDisplayString = "No Class Wars classes are presently defined."
+                    });
                 return;
             }
-            if (stat == "kda")
+
+            if (param == "preview")
             {
-                player.SendMessage("KDA: " + playerstat.kda().ToString(), Color.LimeGreen);
+                if (args.Parameters.Count == 0)
+                {
+                    player.SendErrorMessage("Usage: /class preview [name]");
+                    return;
+                }
+                previewclass(player, args.Parameters[0]);
                 return;
             }
-            if (stat == "games")
+
+            if (param == "description" || param == "desc")
             {
-                player.SendMessage("Games Played: " + playerstat.gamesCompleted, Color.LimeGreen);
+                if (args.Parameters.Count == 0)
+                {
+                    player.SendErrorMessage("Usage: /class desc [name]");
+                    return;
+                }
+                foreach(Classvar c in classes)
+                {
+                    if (c.name == args.Parameters[0])
+                    {
+                        player.SendInfoMessage(c.name + ":");
+                        foreach (string d in c.description)
+                            player.SendSuccessMessage(d);
+                        return;
+                    }
+                }
+                player.SendErrorMessage("Class " + args.Parameters[0] + " not found.");
                 return;
             }
-            if (stat == "averagetime")
+
+            if (!player.HasPermission("CS.admin"))
             {
-                player.SendMessage("Average Game Time: " + playerstat.averageGameTime().ToString(), Color.LimeGreen);
+                player.SendErrorMessage("Usage: /class select [name]");
+                player.SendErrorMessage("/class list [category]");
+                player.SendErrorMessage("/class preview [name]");
+                player.SendErrorMessage("/class desc [name]");
                 return;
             }
-            if (stat == "time")
+
+            if (param == "add")
             {
-                player.SendMessage("Total time played: " + (playerstat.timePlayed + playerstat.timeIncomplete), Color.LimeGreen);
+                if (args.Parameters.Count == 0)
+                {
+                    player.SendErrorMessage("Usage: /class add [name]");
+                    return;
+                }
+                string name = args.Parameters[0];
+                NetItem[] inv = player.PlayerData.inventory;
+                int maxHP = player.PlayerData.maxHealth;
+                int maxMana = player.PlayerData.maxMana;
+                int? extraSlot = player.PlayerData.extraSlot;
+                foreach(Classvar c in classes)
+                {
+                    if (c.name == name)
+                    {
+                        player.SendErrorMessage("Class " + c.name + " already exists");
+                    }
+                }
+                Classvar temp = new Classvar(name, null, null, null, null, null, inv, maxHP, maxMana, extraSlot);
+                classes.Add(temp);
+                class_db.AddClass(temp);
                 return;
             }
-            player.SendErrorMessage("/cwstats <all|kills|deaths|KDA|gamesplayed|averagetime|time>");
-            return;
-        }*/
+
+            if (param == "set")
+            {
+                if (args.Parameters.Count < 2)
+                {
+                    player.SendErrorMessage("Usage: /class set [name] [category|desc|inv|stats]");
+                    return;
+                }
+                string name = args.Parameters[0];
+                string param2 = args.Parameters[1];
+
+                if (param2 == "category" || param2 == "cat")
+                {
+                    if (args.Parameters.Count < 3)
+                    {
+                        player.SendErrorMessage("Usage: /class set [name] category [category]");
+                        return;
+                    }
+                    string cat = args.Parameters[2];
+                    foreach(Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            c.category = cat;
+                            class_db.UpdateClass(c);
+                            player.SendSuccessMessage(c.name + " is now part of category \"" + c.category + "\"");
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+
+                if (param2 == "desc")
+                {
+                    if (args.Parameters.Count < 3)
+                    {
+                        player.SendErrorMessage("Usage: /class set [name] [desc] [add] [nextLine]");
+                        player.SendErrorMessage("/class set [name] [desc] [del]");
+                        return;
+                    }
+                    if (args.Parameters[2] == "add" && args.Parameters.Count < 4)
+                    {
+                        player.SendErrorMessage("Usage: /class set [name] [desc] [add] [nextLine]");
+                        return;
+                    }
+                    if (args.Parameters[2] == "del")
+                    {
+                        foreach (Classvar c in classes)
+                        {
+                            if (c.name == name)
+                            {
+                                player.SendSuccessMessage("Class " + c.name + " deleted.");
+                                class_db.DeleteClass(c.name);
+                                classes.Remove(c);
+                                return;
+                            }
+                        }
+                        player.SendErrorMessage("Class " + name + " not found.");
+                        return;
+                    }
+                    if (args.Parameters[2] == "add")
+                    {
+                        foreach (Classvar c in classes)
+                        {
+                            if (c.name == name)
+                            {
+                                c.description.Add(args.Parameters[4]);
+                                class_db.UpdateClass(c);
+                                player.SendInfoMessage("Current description for " + c.name + ".");
+                                foreach (string x in c.description)
+                                {
+                                    player.SendSuccessMessage(x);
+                                }
+                                return;
+                            }
+                        }
+                        player.SendErrorMessage("Class " + name + " not found.");
+                        return;
+                    }
+                    player.SendErrorMessage("Usage: /class set [name] [desc] [add] [nextLine]");
+                    player.SendErrorMessage("/class set [name] [desc] [del]");
+                    return;
+                }
+
+                if (param2 == "inv")
+                {
+                    foreach(Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            c.inventory = player.PlayerData.inventory;
+                            c.extraSlot = player.PlayerData.extraSlot;
+                            class_db.UpdateClass(c);
+                            player.SendSuccessMessage(c.name + "'s inventory has been udpated.");
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+
+                if (param2 == "stats" || param2 == "stat")
+                {
+                    foreach(Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            c.maxHealth = player.PlayerData.maxHealth;
+                            c.maxMana = player.PlayerData.maxMana;
+                            class_db.UpdateClass(c);
+                            player.SendSuccessMessage(c.name + " HP: " + c.maxHealth + ", Mana: " + c.maxMana);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if (param == "del")
+            {
+                if (args.Parameters.Count == 0)
+                {
+                    player.SendErrorMessage("Usage: /class del [name]");
+                    return;
+                }
+                foreach(Classvar c in classes)
+                {
+                    if (c.name == args.Parameters[0])
+                    {
+                        player.SendSuccessMessage(c.name + " deleted.");
+                        class_db.DeleteClass(c.name);
+                        classes.Remove(c);
+                        return;
+                    }
+                }
+                player.SendErrorMessage("Class " + args.Parameters[0] + " not found.");
+                return;
+            }
+
+            if (param == "buff")
+            {
+                if (args.Parameters.Count < 3)
+                {
+                    player.SendErrorMessage("/class buff [add|del] [name] [buff] [duration]");
+                }
+
+                string param2 = args.Parameters[0];
+                args.Parameters.RemoveAt(0);
+                string name = args.Parameters[0];
+                args.Parameters.RemoveAt(0);
+
+                var buffs = TShock.Utils.GetBuffByName(args.Parameters[0]);
+                if (buffs.Count == 0)
+                {
+                    player.SendErrorMessage("Buff not found.");
+                    return;
+                }
+                else if (buffs.Count > 1)
+                {
+                    TShock.Utils.SendMultipleMatchError(player, buffs.Select(f => Main.buffName[f]));
+                    return;
+                }
+
+                if (param2 == "add")
+                {
+                    if (args.Parameters.Count < 1)
+                    {
+                        player.SendErrorMessage("/class buff add [name] [buff] [duration]");
+                        return;
+                    }
+                    int duration;
+                    if (!int.TryParse(args.Parameters[1], out duration))
+                    {
+                        player.SendErrorMessage("Unable to parse duration");
+                    }
+                    foreach (Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            c.buffs.Add(new Buff(buffs[0], duration));
+                            player.SendSuccessMessage(Main.buffName[buffs[0]] + " added to " + c.name + " with a " + duration + " second duration.");
+                            class_db.UpdateClass(c);
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+
+                if (param2 == "del")
+                {
+                    foreach(Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            foreach (Buff b in c.buffs)
+                            {
+                                if (b.id == buffs[0])
+                                {
+                                    player.SendSuccessMessage(Main.buffName[b.id] + " removed from " + c.name + ".");
+                                    c.buffs.Remove(b);
+                                    return;
+                                }
+                            }
+                            player.SendErrorMessage(c.name + " does not have buff " + Main.buffName[buffs[0]] + ".");
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+
+
+            }
+
+            if (param == "itembuff")
+            {
+
+            }
+        }
         #endregion
     }
 }
