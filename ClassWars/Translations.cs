@@ -23,7 +23,6 @@ namespace ClassWars
             List<NetItem> a = x.inventory.Split('☺').Select(NetItem.Parse).ToList();
             if (a.Count < NetItem.MaxInventory)
             {
-                //TODO: unhardcode this - stop using magic numbers and use NetItem numbers
                 //Set new armour slots empty
                 a.InsertRange(67, new NetItem[2]);
                 //Set new vanity slots empty

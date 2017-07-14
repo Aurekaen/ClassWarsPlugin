@@ -86,4 +86,4 @@ namespace ClassWars
             this.quantity = quantity;
         }
     }
-}
+}   

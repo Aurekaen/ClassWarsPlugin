@@ -207,12 +207,51 @@ namespace ClassWars
         #region classHandling
         public void setclass(TSPlayer player, string className)
         {
-
+            PlayerInfo info = player.GetPlayerInfo();
+            Classvar c = ClassInfo.ClassLookup(className, classes);
+            if (c == null)
+            {
+                player.SendErrorMessage("Class " + className + " not found.");
+                return;
+            }
+            if (info.backup != null)
+            {
+                info.backup = new PlayerData(player);
+            }
+            player.PlayerData.inventory = c.inventory;
+            player.PlayerData.maxHealth = c.maxHealth;
+            player.PlayerData.health = c.maxHealth;
+            player.PlayerData.extraSlot = c.extraSlot;
+            player.PlayerData.maxMana = c.maxMana;
+            player.PlayerData.mana = c.maxMana;
+            info.classInfo = c;
+            info.preview = false;
+            player.SendInfoMessage(c.name + " selected.");
         }
 
         public void previewclass(TSPlayer player, string className)
         {
-
+            PlayerInfo info = player.GetPlayerInfo();
+            Classvar c = ClassInfo.ClassLookup(className, classes);
+            if (c == null)
+            {
+                player.SendErrorMessage("Class " + className + " not found.");
+                return;
+            }
+            if (info.backup != null)
+            {
+                info.backup = new PlayerData(player);
+            }
+            info.preview = true;
+            player.PlayerData.inventory = c.inventory;
+            player.PlayerData.maxHealth = c.maxHealth;
+            player.PlayerData.health = c.maxHealth;
+            player.PlayerData.extraSlot = c.extraSlot;
+            player.PlayerData.maxMana = c.maxMana;
+            player.PlayerData.mana = c.maxMana;
+            info.classInfo = c;
+            player.SendInfoMessage("Previewing " + c.name + ".");
+            player.SendInfoMessage("Inventory will revert on /class select, /class preview, or in 60 seconds.");
         }
         #endregion
 
@@ -1140,7 +1179,7 @@ namespace ClassWars
 
                 if (param2 == "add")
                 {
-                    if (args.Parameters.Count < 1)
+                    if (args.Parameters.Count < 2)
                     {
                         player.SendErrorMessage("/class buff add [name] [buff] [duration]");
                         return;
@@ -1149,6 +1188,7 @@ namespace ClassWars
                     if (!int.TryParse(args.Parameters[1], out duration))
                     {
                         player.SendErrorMessage("Unable to parse duration");
+                        return;
                     }
                     foreach (Classvar c in classes)
                     {
@@ -1176,6 +1216,7 @@ namespace ClassWars
                                 {
                                     player.SendSuccessMessage(Main.buffName[b.id] + " removed from " + c.name + ".");
                                     c.buffs.Remove(b);
+                                    class_db.UpdateClass(c);
                                     return;
                                 }
                             }
@@ -1186,13 +1227,148 @@ namespace ClassWars
                     player.SendErrorMessage("Class " + name + " not found.");
                     return;
                 }
-
-
+                
             }
 
             if (param == "itembuff")
             {
+                if (args.Parameters.Count < 3)
+                {
+                    player.SendErrorMessage("/class itembuff [add|del] [name] [buff] [duration]");
+                    return;
+                }
+                string param2 = args.Parameters[0];
+                string name = args.Parameters[1];
+                args.Parameters.RemoveAt(0);
+                args.Parameters.RemoveAt(0);
 
+                var buffs = TShock.Utils.GetBuffByName(args.Parameters[0]);
+                if (buffs.Count == 0)
+                {
+                    player.SendErrorMessage("Buff not found.");
+                    return;
+                }
+                else if (buffs.Count > 1)
+                {
+                    TShock.Utils.SendMultipleMatchError(player, buffs.Select(f => Main.buffName[f]));
+                    return;
+                }
+
+                Item tempItem = player.TPlayer.HeldItem;
+
+                if (param2 == "add")
+                {
+                    if (args.Parameters.Count < 2)
+                    {
+                        player.SendErrorMessage("/class itembuff [add|del] [name] [buff] [duration]");
+                        return;
+                    }
+                    int duration;
+                    if (!int.TryParse(args.Parameters[1], out duration))
+                    {
+                        player.SendErrorMessage("Unable to parse duration");
+                        return;
+                    }
+                    foreach (Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            c.itembuffs.Add(new ItemBuff(buffs[0], duration, tempItem.netID));
+                            player.SendSuccessMessage(c.name + " now gains " + Main.buffName[buffs[0]] + " while holding " + tempItem.name + ".");
+                            class_db.UpdateClass(c);
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+
+                if (param2 == "del")
+                {
+                    foreach (Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            foreach(ItemBuff i in c.itembuffs)
+                            {
+                                if (i.id == buffs[0])
+                                {
+                                    player.SendSuccessMessage(Main.buffName[i.id] + " removed from " + c.name + "'s " + tempItem.name + ".");
+                                    c.itembuffs.Remove(i);
+                                    class_db.UpdateClass(c);
+                                    return;
+                                }
+                            }
+                            player.SendErrorMessage(c.name + " does not contain itembuff " + Main.buffName[buffs[0]] + ".");
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+            }
+
+            if (param == "ammo")
+            {
+                if (args.Parameters.Count < 2)
+                {
+                    player.SendErrorMessage("Usage: /class ammo [add|del] [name] [refresh time]");
+                    return;
+                }
+                string param2 = args.Parameters[0];
+                string name = args.Parameters[1];
+                args.Parameters.RemoveAt(0);
+                args.Parameters.RemoveAt(0);
+                Item tempItem = player.TPlayer.HeldItem;
+
+                if (param2 == "add")
+                {
+                    if (args.Parameters.Count == 0)
+                    {
+                        player.SendErrorMessage("Usage: /class ammo add [name] [refresh time]");
+                    }
+                    int refresh;
+                    if (!int.TryParse(args.Parameters[0], out refresh))
+                    {
+                        player.SendErrorMessage("Unable to parse refresh time.");
+                    }
+                    foreach(Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            c.ammo.Add(new Ammo(refresh, tempItem.netID, tempItem.stack));
+                            class_db.UpdateClass(c);
+                            player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.name + " every " + refresh + " seconds.");
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
+
+                if (param2 == "del")
+                {
+                    foreach(Classvar c in classes)
+                    {
+                        if (c.name == name)
+                        {
+                            foreach (Ammo a in c.ammo)
+                            {
+                                if (a.item == tempItem.netID)
+                                {
+                                    player.SendSuccessMessage(Main.itemName[a.item] + " will no longer be refilled for " + c.name + ".");
+                                    c.ammo.Remove(a);
+                                    class_db.UpdateClass(c);
+                                    return;
+                                }
+                            }
+                            player.SendErrorMessage(c.name + " does not refill " + tempItem.name);
+                            return;
+                        }
+                    }
+                    player.SendErrorMessage("Class " + name + " not found.");
+                    return;
+                }
             }
         }
         #endregion

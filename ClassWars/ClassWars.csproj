@@ -69,6 +69,8 @@
   <ItemGroup>
     <Compile Include="Arena.cs" />
     <Compile Include="ArenaDatabase.cs" />
+    <Compile Include="InfoExtensions.cs" />
+    <Compile Include="PlayerInfo.cs" />
     <Compile Include="Classvar.cs" />
     <Compile Include="Plugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
