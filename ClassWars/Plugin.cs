@@ -17,7 +17,7 @@ using Microsoft.Xna.Framework;
 
 namespace ClassWars
 {
-    [ApiVersion(2, 0)]
+    [ApiVersion(2, 1)]
     public class ClassWars : TerrariaPlugin
     {
         public override string Name { get { return "ClassWars"; } }
@@ -32,6 +32,11 @@ namespace ClassWars
         private static List<Classvar> classes = new List<Classvar>();
         private static List<Arena> _arenas = new List<Arena>();
         private static List<string> arenaNames = new List<string>();
+        private List<ProgressiveItemBuff> pItemBuff = new List<ProgressiveItemBuff>();
+        private List<ProgressiveBuff> pBuff = new List<ProgressiveBuff>();
+        private List<ProgressiveAmmo> pAmmo = new List<ProgressiveAmmo>();
+        private List<tempClassStorage> gameClasses = new List<tempClassStorage>();
+        private List<tempClassStorage> tempClasses = new List<tempClassStorage>();
         private string GameInProgress = "none";
         private List<TSPlayer> redTeam = new List<TSPlayer>() { null };
         private List<TSPlayer> blueTeam = new List<TSPlayer>() { null };
@@ -70,7 +75,7 @@ namespace ClassWars
             {
                 item.netDefaults(i);
                 if (item.paint > 0)
-                    Colors.Add(item.name.Substring(0, item.name.Length - 6).ToLowerInvariant(), item.paint);
+                    Colors.Add(item.Name.Substring(0, item.Name.Length - 6).ToLowerInvariant(), item.paint);
             }
             bluePaintID = GetColorID("blue")[0];
             redPaintID = GetColorID("red")[0];
@@ -103,6 +108,7 @@ namespace ClassWars
             base.Dispose(disposing);
         }
 
+        #region triggers
         private void onGetData(GetDataEventArgs args)
         {
             if (GameInProgress == "none")
@@ -154,27 +160,21 @@ namespace ClassWars
 
         }
 
-        private bool isMiner(int whoAmI)
-        {
-            TSPlayer player = TShock.Players[whoAmI];
-            for (int i = 0; i < 20; i++)
-            {
-                if (player.TPlayer.armor[i].type == 410)
-                    return true;
-            }
-            return false;
-        }
-
+        
         private void OnPlayerLeave(LeaveEventArgs args)
         {
-            if (redTeam.Contains(TShock.Players[args.Who]))
+            TSPlayer player = TShock.Players[args.Who];
+            if (redTeam.Contains(player))
             {
-                redTeam.Remove(TShock.Players[args.Who]);
+                redTeam.Remove(player);
             }
-            if (blueTeam.Contains(TShock.Players[args.Who]))
+            if (blueTeam.Contains(player))
             {
-                blueTeam.Remove(TShock.Players[args.Who]);
+                blueTeam.Remove(player);
             }
+            
+            resetClass(player);
+
         }
 
         private void onUpdate(EventArgs args)
@@ -185,14 +185,26 @@ namespace ClassWars
                 {
                     //Forces PVP for both teams for the duration of the game.
                     plr.TPlayer.hostile = true;
-                    NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", plr.Index, 0f, 0f, 0f);
+                    NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, plr.Index, 0f, 0f, 0f);
                 }
                 foreach (TSPlayer plr in blueTeam)
                 {
                     plr.TPlayer.hostile = true;
-                    NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", plr.Index, 0f, 0f, 0f);
+                    NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, plr.Index, 0f, 0f, 0f);
                 }
             }
+        }
+        #endregion
+
+        private bool isMiner(int whoAmI)
+        {
+            TSPlayer player = TShock.Players[whoAmI];
+            for (int i = 0; i < 20; i++)
+            {
+                if (player.TPlayer.armor[i].type == 410)
+                    return true;
+            }
+            return false;
         }
 
         private void arenaNameReload()
@@ -208,6 +220,7 @@ namespace ClassWars
         public void setclass(TSPlayer player, string className)
         {
             PlayerInfo info = player.GetPlayerInfo();
+            resetClass(player);
             Classvar c = ClassInfo.ClassLookup(className, classes);
             if (c == null)
             {
@@ -227,6 +240,8 @@ namespace ClassWars
             info.classInfo = c;
             info.preview = false;
             player.SendInfoMessage(c.name + " selected.");
+            tempClassStorage x = new tempClassStorage(c, player);
+            gameClasses.Add(x);
         }
 
         public void previewclass(TSPlayer player, string className)
@@ -252,6 +267,52 @@ namespace ClassWars
             info.classInfo = c;
             player.SendInfoMessage("Previewing " + c.name + ".");
             player.SendInfoMessage("Inventory will revert on /class select, /class preview, or in 60 seconds.");
+            Task.Delay(60000).ContinueWith(t => resetClass(player));
+        }
+
+        public void resetClass(TSPlayer player)
+        {
+            PlayerInfo info = player.GetPlayerInfo();
+            if (player.Dead)
+            {
+                Task.Delay(1000).ContinueWith(t => resetClass(player));
+                return;
+            }
+            if (info.preview == false)
+            {
+                foreach(tempClassStorage t in gameClasses)
+                {
+                    if (t.player == player)
+                    {
+                        tempClasses.Add(t);
+                        gameClasses.Remove(t);
+                    }
+                }
+            }
+            info.Restore(player);
+            player.SendInfoMessage("Preview automatically ended.");
+            info.preview = false;
+            foreach(ProgressiveAmmo ammo in pAmmo)
+            {
+                if (ammo.player == player)
+                {
+                    pAmmo.Remove(ammo);
+                }
+            }
+            foreach(ProgressiveItemBuff iBuff in pItemBuff)
+            {
+                if (iBuff.player == player)
+                {
+                    pItemBuff.Remove(iBuff);
+                }
+            }
+            foreach(ProgressiveBuff _buff in pBuff)
+            {
+                if (_buff.player == player)
+                {
+                    pBuff.Remove(_buff);
+                }
+            }
         }
         #endregion
 
@@ -412,13 +473,13 @@ namespace ClassWars
             {
                 player.Teleport(4374 * 16, 240 * 16);
                 player.TPlayer.hostile = false;
-                NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", player.Index, 0f, 0f, 0f);
+                NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, player.Index, 0f, 0f, 0f);
             }
             foreach (TSPlayer player in blueTeam)
             {
                 player.Teleport(4374 * 16, 240 * 16);
                 player.TPlayer.hostile = false;
-                NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, "", player.Index, 0f, 0f, 0f);
+                NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, player.Index, 0f, 0f, 0f);
             }
             redTeam.Clear();
             blueTeam.Clear();
@@ -864,7 +925,7 @@ namespace ClassWars
                     player.SendErrorMessage("/class del [name]");
                     player.SendErrorMessage("/class buff [add|del] [name] [buff] [duration]");
                     player.SendErrorMessage("/class itembuff [add|del] [name] [buff] [duration]");
-                    player.SendErrorMessage("/class ammo [add|del] [name] [refresh time]");
+                    player.SendErrorMessage("/class ammo [add|del] [name] [refresh time] [maximum ammo count]");
                 }
                 else
                 {
@@ -1173,7 +1234,7 @@ namespace ClassWars
                 }
                 else if (buffs.Count > 1)
                 {
-                    TShock.Utils.SendMultipleMatchError(player, buffs.Select(f => Main.buffName[f]));
+                    TShock.Utils.SendMultipleMatchError(player, buffs.Select(f => TShock.Utils.GetBuffName(f)));
                     return;
                 }
 
@@ -1195,7 +1256,7 @@ namespace ClassWars
                         if (c.name == name)
                         {
                             c.buffs.Add(new Buff(buffs[0], duration));
-                            player.SendSuccessMessage(Main.buffName[buffs[0]] + " added to " + c.name + " with a " + duration + " second duration.");
+                            player.SendSuccessMessage(TShock.Utils.GetBuffName(buffs[0]) + " added to " + c.name + " with a " + duration + " second duration.");
                             class_db.UpdateClass(c);
                             return;
                         }
@@ -1214,13 +1275,13 @@ namespace ClassWars
                             {
                                 if (b.id == buffs[0])
                                 {
-                                    player.SendSuccessMessage(Main.buffName[b.id] + " removed from " + c.name + ".");
+                                    player.SendSuccessMessage(TShock.Utils.GetBuffName(b.id) + " removed from " + c.name + ".");
                                     c.buffs.Remove(b);
                                     class_db.UpdateClass(c);
                                     return;
                                 }
                             }
-                            player.SendErrorMessage(c.name + " does not have buff " + Main.buffName[buffs[0]] + ".");
+                            player.SendErrorMessage(c.name + " does not have buff " + TShock.Utils.GetBuffName(buffs[0]) + ".");
                             return;
                         }
                     }
@@ -1250,7 +1311,7 @@ namespace ClassWars
                 }
                 else if (buffs.Count > 1)
                 {
-                    TShock.Utils.SendMultipleMatchError(player, buffs.Select(f => Main.buffName[f]));
+                    TShock.Utils.SendMultipleMatchError(player, buffs.Select(f => TShock.Utils.GetBuffName(f)));
                     return;
                 }
 
@@ -1274,7 +1335,7 @@ namespace ClassWars
                         if (c.name == name)
                         {
                             c.itembuffs.Add(new ItemBuff(buffs[0], duration, tempItem.netID));
-                            player.SendSuccessMessage(c.name + " now gains " + Main.buffName[buffs[0]] + " while holding " + tempItem.name + ".");
+                            player.SendSuccessMessage(c.name + " now gains " + TShock.Utils.GetBuffName(buffs[0]) + " while holding " + tempItem.Name + ".");
                             class_db.UpdateClass(c);
                             return;
                         }
@@ -1293,13 +1354,13 @@ namespace ClassWars
                             {
                                 if (i.id == buffs[0])
                                 {
-                                    player.SendSuccessMessage(Main.buffName[i.id] + " removed from " + c.name + "'s " + tempItem.name + ".");
+                                    player.SendSuccessMessage(TShock.Utils.GetBuffName(i.id) + " removed from " + c.name + "'s " + tempItem.Name + ".");
                                     c.itembuffs.Remove(i);
                                     class_db.UpdateClass(c);
                                     return;
                                 }
                             }
-                            player.SendErrorMessage(c.name + " does not contain itembuff " + Main.buffName[buffs[0]] + ".");
+                            player.SendErrorMessage(c.name + " does not contain itembuff " + TShock.Utils.GetBuffName(buffs[0]) + ".");
                             return;
                         }
                     }
@@ -1312,7 +1373,7 @@ namespace ClassWars
             {
                 if (args.Parameters.Count < 2)
                 {
-                    player.SendErrorMessage("Usage: /class ammo [add|del] [name] [refresh time]");
+                    player.SendErrorMessage("Usage: /class ammo [add|del] [name] [refresh time] [maximum ammo count]");
                     return;
                 }
                 string param2 = args.Parameters[0];
@@ -1325,12 +1386,25 @@ namespace ClassWars
                 {
                     if (args.Parameters.Count == 0)
                     {
-                        player.SendErrorMessage("Usage: /class ammo add [name] [refresh time]");
+                        player.SendErrorMessage("Usage: /class ammo add [name] [refresh time] [maximum ammo count]");
                     }
                     int refresh;
                     if (!int.TryParse(args.Parameters[0], out refresh))
                     {
                         player.SendErrorMessage("Unable to parse refresh time.");
+                    }
+                    if (refresh < 1)
+                    {
+                        player.SendErrorMessage("Refresh time must be at least 1 second");
+                    }
+                    int maxAmmo;
+                    if (!int.TryParse(args.Parameters[1], out maxAmmo))
+                    {
+                        player.SendErrorMessage("Unable to parse maximum ammo count");
+                    }
+                    if (maxAmmo < 1)
+                    {
+                        player.SendErrorMessage("Maximum ammo count must be at least 1");
                     }
                     foreach(Classvar c in classes)
                     {
@@ -1338,7 +1412,7 @@ namespace ClassWars
                         {
                             c.ammo.Add(new Ammo(refresh, tempItem.netID, tempItem.stack));
                             class_db.UpdateClass(c);
-                            player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.name + " every " + refresh + " seconds.");
+                            player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.Name + " every " + refresh + " seconds.");
                             return;
                         }
                     }
@@ -1356,13 +1430,13 @@ namespace ClassWars
                             {
                                 if (a.item == tempItem.netID)
                                 {
-                                    player.SendSuccessMessage(Main.itemName[a.item] + " will no longer be refilled for " + c.name + ".");
+                                    player.SendSuccessMessage(TShock.Utils.GetItemById(a.item).Name + " will no longer be refilled for " + c.name + ".");
                                     c.ammo.Remove(a);
                                     class_db.UpdateClass(c);
                                     return;
                                 }
                             }
-                            player.SendErrorMessage(c.name + " does not refill " + tempItem.name);
+                            player.SendErrorMessage(c.name + " does not refill " + tempItem.Name);
                             return;
                         }
                     }

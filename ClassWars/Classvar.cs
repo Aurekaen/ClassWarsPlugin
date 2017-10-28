@@ -86,4 +86,60 @@ namespace ClassWars
             this.quantity = quantity;
         }
     }
+
+    public class ProgressiveAmmo
+    {
+        public int refresh, item, quantity, count;
+        public TSPlayer player;
+
+        public ProgressiveAmmo(int refresh, int item, int quantity, int count, TSPlayer player)
+        {
+            this.refresh = refresh;
+            this.item = item;
+            this.quantity = quantity;
+            this.player = player;
+            this.count = count;
+        }
+    }
+
+    public class ProgressiveBuff
+    {
+        public int id, duration, count;
+        public TSPlayer player;
+
+        public ProgressiveBuff(int id, int duration, int count, TSPlayer player)
+        {
+            this.id = id;
+            this.duration = duration;
+            this.player = player;
+            this.count = count;
+        }
+    }
+
+    public class ProgressiveItemBuff
+    {
+        public int id, duration, item, count;
+        public TSPlayer player;
+
+        public ProgressiveItemBuff(int id, int duration, int item, int count, TSPlayer player)
+        {
+            this.id = id;
+            this.duration = duration;
+            this.item = item;
+            this.count = count;
+            this.player = player;
+        }
+    }
+
+    public class tempClassStorage
+    {
+        public Classvar tempClass;
+        public TSPlayer player;
+        
+        public tempClassStorage(Classvar tempClass, TSPlayer player)
+        {
+            this.tempClass = tempClass;
+            this.player = player;
+        }
+    }
 }   
