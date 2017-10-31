@@ -103,7 +103,7 @@ namespace ClassWars
             List<string> a = new List<string>();
             foreach (Ammo b in x)
             {
-                a.Add(b.refresh + "|" + b.item + "|" + b.quantity);
+                a.Add(b.refresh + "|" + b.item + "|" + b.quantity + "|" + b.maxCount + "|" + b.prefix);
             }
             string temp = string.Join("☺", a);
             return temp;
@@ -113,17 +113,19 @@ namespace ClassWars
         {
             List<Ammo> temp = new List<Ammo>();
             string[] a = x.Split('☺');
-            Ammo b = new Ammo(0, 0, 0);
+            Ammo b = new Ammo(0, 0, 0, 0, 0);
             string[] c;
-            int d, e, f;
+            int d, e, f, g, h;
             foreach (string s in a)
             {
                 c = s.Split('|');
-                if (int.TryParse(c[0], out d) && int.TryParse(c[1], out e) && int.TryParse(c[2], out f))
+                if (int.TryParse(c[0], out d) && int.TryParse(c[1], out e) && int.TryParse(c[2], out f) && int.TryParse(c[2], out g) && int.TryParse(c[2], out h))
                 {
                     b.refresh = d;
                     b.item = e;
                     b.quantity = f;
+                    b.maxCount = g;
+                    b.prefix = h;
                     temp.Add(b);
                 }
             }

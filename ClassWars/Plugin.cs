@@ -23,7 +23,7 @@ namespace ClassWars
         public override string Name { get { return "ClassWars"; } }
         public override string Author { get { return "Alec"; } }
         public override string Description { get { return "Automatic Class Wars hosting plugin."; } }
-        public override Version Version { get { return new Version(1, 0, 0, 0); } }
+        public override Version Version { get { return new Version(2, 0, 0, 0); } }
 
         #region variables
         public static Dictionary<string, int> Colors = new Dictionary<string, int>();
@@ -125,6 +125,7 @@ namespace ClassWars
                     if (action == 0)
                     {
                         CheckWins();
+                        Task.Delay(1000).ContinueWith(t => CheckWins());
                         if (Main.tile[blockX, blockY].type != 203 && Main.tile[blockX, blockY].type != 25 && Main.tile[blockX, blockY].type != 117)
                         {
                             if (isMiner(args.Msg.whoAmI))
@@ -137,10 +138,6 @@ namespace ClassWars
                                 }
                             }
                         }
-                    }
-                    else
-                    {
-                        return;
                     }
                 }
             if (args.MsgID == PacketTypes.PlayerSpawn)
@@ -1092,7 +1089,7 @@ namespace ClassWars
                             {
                                 HeaderFormat = "Class Wars Class Categories:",
                                 FooterFormat = "type /class list {{0}}",
-                                NothingToDisplayString = "No classes are presently defined."
+                                NothingToDisplayString = "No categories are presently defined."
                             });
                         return;
                     }
