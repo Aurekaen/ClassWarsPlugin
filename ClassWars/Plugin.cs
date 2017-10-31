@@ -35,14 +35,15 @@ namespace ClassWars
         private List<ProgressiveItemBuff> pItemBuff = new List<ProgressiveItemBuff>();
         private List<ProgressiveBuff> pBuff = new List<ProgressiveBuff>();
         private List<ProgressiveAmmo> pAmmo = new List<ProgressiveAmmo>();
-        private List<tempClassStorage> gameClasses = new List<tempClassStorage>();
-        private List<tempClassStorage> tempClasses = new List<tempClassStorage>();
+        private List<TempClassStorage> gameClasses = new List<TempClassStorage>();
+        private List<TempClassStorage> tempClasses = new List<TempClassStorage>();
         private string GameInProgress = "none";
         private List<TSPlayer> redTeam = new List<TSPlayer>() { null };
         private List<TSPlayer> blueTeam = new List<TSPlayer>() { null };
         public int redPaintID, bluePaintID, blueBunkerCount, redBunkerCount, arenaIndex;
         public static System.Timers.Timer scoreCheck = new System.Timers.Timer { Interval = 120000, AutoReset = true, Enabled = false};
         public static System.Timers.Timer countdown = new System.Timers.Timer { Interval = 1000, AutoReset = true, Enabled = false };
+        public static System.Timers.Timer gameTick = new System.Timers.Timer { Interval = 1000, AutoReset = true, Enabled = true };
         private int count, redDeathCount, blueDeathCount;
         public DateTime start, end;
         #endregion
@@ -62,10 +63,12 @@ namespace ClassWars
             ServerApi.Hooks.NetGetData.Register(this, onGetData);
             ServerApi.Hooks.ServerLeave.Register(this, OnPlayerLeave);
             ServerApi.Hooks.GameUpdate.Register(this, onUpdate);
+            ServerApi.Hooks.NetGreetPlayer.Register(this, onGreet);
             Commands.ChatCommands.Add(new Command("cw.main", cw, "cw", "classwars"));
             Commands.ChatCommands.Add(new Command("CS.main", cselect, "class", "cs"));
             scoreCheck.Elapsed += ScoreUpdate;
             countdown.Elapsed += startCountdown;
+            gameTick.Elapsed += tickClasses;
 
             Colors.Add("blank", 0);
 
@@ -160,6 +163,21 @@ namespace ClassWars
 
         }
 
+        private void onGreet(GreetPlayerEventArgs args)
+        {
+            TSPlayer player = TShock.Players[args.Who];
+            if (GameInProgress != "none")
+            {
+                foreach(TempClassStorage c in tempClasses)
+                {
+                    if (c.player == player)
+                    {
+                        setclass(player, c.tempClass.name);
+                        player.SendInfoMessage("Do \"/cw join [team]\" to rejoin your team");
+                    }
+                }
+            }
+        }
         
         private void OnPlayerLeave(LeaveEventArgs args)
         {
@@ -240,7 +258,19 @@ namespace ClassWars
             info.classInfo = c;
             info.preview = false;
             player.SendInfoMessage(c.name + " selected.");
-            tempClassStorage x = new tempClassStorage(c, player);
+            TempClassStorage x = new TempClassStorage(c, player);
+            foreach(Ammo a in c.ammo)
+            {
+                pAmmo.Add(new ProgressiveAmmo(a.refresh, a.item, a.quantity, a.maxCount, a.prefix, 0, player));
+            }
+            foreach (Buff b in c.buffs)
+            {
+                pBuff.Add(new ProgressiveBuff(b.id, b.duration, 0, player));
+            }
+            foreach (ItemBuff i in c.itembuffs)
+            {
+                pItemBuff.Add(new ProgressiveItemBuff(i.id, i.duration, i.item, 0, player));
+            }
             gameClasses.Add(x);
         }
 
@@ -280,7 +310,7 @@ namespace ClassWars
             }
             if (info.preview == false)
             {
-                foreach(tempClassStorage t in gameClasses)
+                foreach(TempClassStorage t in gameClasses)
                 {
                     if (t.player == player)
                     {
@@ -429,6 +459,93 @@ namespace ClassWars
             TShock.Utils.Broadcast("Blue team's bunker has " + blueBunkerCount.ToString() + " blocks remaining.", Color.LightBlue);
         }
 
+        public void tickClasses(object sender, ElapsedEventArgs e)
+        {
+            foreach (ProgressiveBuff b in pBuff)
+            {
+                buffPlayer(b.player, b.id, b.duration);
+            }
+            foreach (ProgressiveItemBuff i in pItemBuff)
+            {
+                if (i.player.TPlayer.inventory[i.player.TPlayer.selectedItem].Name == TShock.Utils.GetItemById(i.item).Name)
+                {
+                    buffPlayer(i.player, i.id, i.duration);
+                }
+            }
+            foreach (ProgressiveAmmo a in pAmmo)
+            {
+                Item i = TShock.Utils.GetItemById(a.item);
+                if (a.count <= 0)
+                {
+                    int stackSize = ItemCount(a.player, i);
+                    if (stackSize < a.maxCount)
+                    {
+                        if (a.player.InventorySlotAvailable || (i.type > 70 && i.type < 75) || i.ammo > 0 || i.type == 58 || i.type == 184 && a.quantity != 0)
+                        {
+                            a.player.GiveItem(i.type, i.Name, i.width, i.height, a.quantity, a.prefix); 
+                        }
+                    }
+                }
+                else
+                {
+                    count--;
+                }
+            }
+        }
+
+        public int ItemCount(TSPlayer player, Item _item)
+        {
+            int count = 0;
+            for (int i = 0; i < 59; i++)
+            {
+                if (player.TPlayer.inventory[i].Name == _item.Name)
+                    count = count + player.TPlayer.inventory[i].stack;
+            }
+            for (int i = 0; i < 20; i++)
+            {
+                if (player.TPlayer.armor[i].Name == _item.Name)
+                    count = count + player.TPlayer.inventory[i].stack;
+            }
+            if (player.TPlayer.trashItem.Name == _item.Name)
+                count = count + player.TPlayer.trashItem.stack;
+            return count;
+        }
+
+        public void buffPlayer(TSPlayer player, int buffID, int duration)
+        {
+            if (buffID == 94)
+            {
+                player.TPlayer.ClearBuff(94);
+                player.SetBuff(buffID, duration);
+                return;
+            }
+            player.SetBuff(buffID, duration * 60);
+            return;
+        }
+
+        public void Refill()
+        {
+            Arena arena = _arenas[arenaIndex];
+            for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
+            {
+                for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
+                {
+                    int x = (int)arena.arenaTopL.X + i;
+                    int y = (int)arena.arenaTopL.Y + j;
+                    var tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j];
+                    if (tile.wallColor() == bluePaintID || tile.wallColor() == redPaintID)
+                    {
+                        if (tile.wall == 195)
+                            tile.type = 203;
+                        if (tile.wall == 190)
+                            tile.type = 25;
+                        if (tile.wall == 200)
+                            tile.type = 117;
+                    }
+                }
+            }
+        }
+
         public void CheckWins()
         {
             Arena arena = _arenas[arenaIndex];
@@ -474,12 +591,14 @@ namespace ClassWars
                 player.Teleport(4374 * 16, 240 * 16);
                 player.TPlayer.hostile = false;
                 NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, player.Index, 0f, 0f, 0f);
+                resetClass(player);
             }
             foreach (TSPlayer player in blueTeam)
             {
                 player.Teleport(4374 * 16, 240 * 16);
                 player.TPlayer.hostile = false;
                 NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, player.Index, 0f, 0f, 0f);
+                resetClass(player);
             }
             redTeam.Clear();
             blueTeam.Clear();
@@ -498,7 +617,9 @@ namespace ClassWars
             TShock.Utils.Broadcast("Blue Team Deaths: " + blueDeathCount.ToString(), winningTeam);
             TShock.Utils.Broadcast("Total Game Time: " + elapsed.Hours + " Hours, " + elapsed.Minutes + " Minutes, " + elapsed.Seconds+ " Seconds.", winningTeam);
             TShock.Utils.Broadcast("=====================", winningTeam);
-            Commands.HandleCommand(TSPlayer.Server, "/refill");
+            Refill();
+            tempClasses = null;
+            gameClasses = null;
         }
         #endregion
 
@@ -1410,9 +1531,9 @@ namespace ClassWars
                     {
                         if (c.name == name)
                         {
-                            c.ammo.Add(new Ammo(refresh, tempItem.netID, tempItem.stack));
+                            c.ammo.Add(new Ammo(refresh, tempItem.netID, tempItem.stack, maxAmmo, tempItem.prefix));
                             class_db.UpdateClass(c);
-                            player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.Name + " every " + refresh + " seconds.");
+                            player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.prefix + " " + tempItem.Name + " every " + refresh + " seconds.");
                             return;
                         }
                     }
@@ -1436,7 +1557,7 @@ namespace ClassWars
                                     return;
                                 }
                             }
-                            player.SendErrorMessage(c.name + " does not refill " + tempItem.Name);
+                            player.SendErrorMessage(c.name + " does not refill " + tempItem.Name + ".");
                             return;
                         }
                     }

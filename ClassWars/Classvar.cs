@@ -77,28 +77,32 @@ namespace ClassWars
 
     public class Ammo
     {
-        public int refresh, item, quantity;
+        public int refresh, item, quantity, maxCount, prefix;
 
-        public Ammo(int refresh, int item, int quantity)
+        public Ammo(int refresh, int item, int quantity, int maxCount, int prefix)
         {
             this.refresh = refresh;
             this.item = item;
             this.quantity = quantity;
+            this.maxCount = maxCount;
+            this.prefix = prefix;
         }
     }
 
     public class ProgressiveAmmo
     {
-        public int refresh, item, quantity, count;
+        public int refresh, item, quantity, count, maxCount, prefix;
         public TSPlayer player;
 
-        public ProgressiveAmmo(int refresh, int item, int quantity, int count, TSPlayer player)
+        public ProgressiveAmmo(int refresh, int item, int quantity, int maxCount, int prefix, int count, TSPlayer player)
         {
             this.refresh = refresh;
             this.item = item;
             this.quantity = quantity;
+            this.maxCount = maxCount;
             this.player = player;
             this.count = count;
+            this.prefix = prefix;
         }
     }
 
@@ -131,12 +135,12 @@ namespace ClassWars
         }
     }
 
-    public class tempClassStorage
+    public class TempClassStorage
     {
         public Classvar tempClass;
         public TSPlayer player;
         
-        public tempClassStorage(Classvar tempClass, TSPlayer player)
+        public TempClassStorage(Classvar tempClass, TSPlayer player)
         {
             this.tempClass = tempClass;
             this.player = player;
