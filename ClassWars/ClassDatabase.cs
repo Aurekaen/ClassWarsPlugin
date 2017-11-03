@@ -6,6 +6,7 @@ using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using TShockAPI;
 using TShockAPI.DB;
+using Microsoft.Xna.Framework;
 
 namespace ClassWars
 {
@@ -21,6 +22,7 @@ namespace ClassWars
                     ? (IQueryBuilder)new SqliteQueryCreator()
                     : new MysqlQueryCreator());
             var table = new SqlTable("Classes",
+                new SqlColumn("ID", MySqlDbType.Int32) { AutoIncrement = true, Primary = true },
                 new SqlColumn("Name", MySqlDbType.String),
                 new SqlColumn("Category", MySqlDbType.String),
                 new SqlColumn("Description", MySqlDbType.String),
@@ -105,12 +107,8 @@ namespace ClassWars
         public void UpdateClass(Classvar x)
         {
             StorageFriendlyClassvar update = Translations.dataPrep(x);
-            var query =
-                string.Format(
-                    "UPDATE Classes SET Category = {0}, Description = {1}, Buffs = {2}, Itembuffs = {3}, Ammo = {4}, Inventory = {5}, MaxHealth = {6}, MaxMana = {7}, ExtraSlot = {8} WHERE Name = @0",
-                    update.category, update.description, update.buffs, update.itembuffs, update.ammo, update.inventory, update.maxHealth, update.maxMana, update.extraSlot);
-
-            Query(query, update.name);
+            Query("UPDATE Classes SET Category = @0, Description = @1, Buffs = @2, Itembuffs = @3, Ammo = @4, Inventory = @5, MaxHealth = @6, MaxMana = @7, ExtraSlot = @8 WHERE Name = @9",
+                update.category, update.description, update.buffs, update.itembuffs, update.ammo, update.inventory, update.maxHealth, update.maxMana, update.extraSlot, update.name);
         }
 
         public void LoadClasses(ref List<Classvar> list)

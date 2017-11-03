@@ -14,6 +14,7 @@ using System.Threading;
 using System.Timers;
 using System.Diagnostics;
 using Microsoft.Xna.Framework;
+using Terraria.Localization;
 
 namespace ClassWars
 {
@@ -107,6 +108,7 @@ namespace ClassWars
                 ServerApi.Hooks.NetGetData.Deregister(this, onGetData);
                 ServerApi.Hooks.ServerLeave.Deregister(this, OnPlayerLeave);
                 ServerApi.Hooks.GameUpdate.Deregister(this, onUpdate);
+                ServerApi.Hooks.NetGreetPlayer.Deregister(this, onGreet);
             }
             base.Dispose(disposing);
         }
@@ -232,73 +234,638 @@ namespace ClassWars
         }
 
         #region classHandling
-        public void setclass(TSPlayer player, string className)
+        public void setclass(TSPlayer pl, string className)
         {
+            classes.Clear();
+            class_db.LoadClasses(ref classes);
+            TSPlayer player = TShock.Players[pl.Index];
             PlayerInfo info = player.GetPlayerInfo();
+            List<Classvar> z = ClassInfo.ClassLookup(className, classes);
+            if (z.Count > 1)
+            {
+                List<string> names = new List<string>();
+                foreach(Classvar a in z)
+                {
+                    names.Add(a.name);
+                }
+                string y = string.Join(", ", names);
+                player.SendErrorMessage("Multiple classes found: ");
+                player.SendErrorMessage(y);
+                return;
+            }
+            if (z.Count == 0)
+            {
+                player.SendErrorMessage("No classes found.");
+                return;
+            }
+            Classvar c = z[0];
             resetClass(player);
-            Classvar c = ClassInfo.ClassLookup(className, classes);
+
             if (c == null)
             {
                 player.SendErrorMessage("Class " + className + " not found.");
                 return;
             }
-            if (info.backup != null)
+            if (info.backup == null)
             {
                 info.backup = new PlayerData(player);
+                info.backup.CopyCharacter(player);
             }
-            player.PlayerData.inventory = c.inventory;
-            player.PlayerData.maxHealth = c.maxHealth;
+            player.IgnoreSSCPackets = true;
             player.PlayerData.health = c.maxHealth;
-            player.PlayerData.extraSlot = c.extraSlot;
-            player.PlayerData.maxMana = c.maxMana;
-            player.PlayerData.mana = c.maxMana;
+            player.PlayerData.maxHealth = c.maxHealth;
+            player.TPlayer.statLifeMax2 = c.maxHealth;
+            player.TPlayer.statLifeMax = c.maxHealth;
+            player.TPlayer.statLife = c.maxHealth;
+            player.TPlayer.statManaMax = c.maxMana;
+            player.TPlayer.statMana = c.maxMana;
+            if (c.extraSlot != null)
+                player.TPlayer.extraAccessory = c.extraSlot.Value == 1 ? true : false;
+
+            #region invCopy
+            for (int i = 0; i < NetItem.MaxInventory; i++)
+            {
+                if (i < NetItem.InventoryIndex.Item2)
+                {
+                    //0-58
+                    player.TPlayer.inventory[i].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.inventory[i].netID != 0)
+                    {
+                        player.TPlayer.inventory[i].stack = c.inventory[i].Stack;
+                        player.TPlayer.inventory[i].prefix = c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.ArmorIndex.Item2)
+                {
+                    //59-78
+                    var index = i - NetItem.ArmorIndex.Item1;
+                    player.TPlayer.armor[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.armor[index].netID != 0)
+                    {
+                        player.TPlayer.armor[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.armor[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.DyeIndex.Item2)
+                {
+                    //79-88
+                    var index = i - NetItem.DyeIndex.Item1;
+                    player.TPlayer.dye[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.dye[index].netID != 0)
+                    {
+                        player.TPlayer.dye[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.dye[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.MiscEquipIndex.Item2)
+                {
+                    //89-93
+                    var index = i - NetItem.MiscEquipIndex.Item1;
+                    player.TPlayer.miscEquips[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.miscEquips[index].netID != 0)
+                    {
+                        player.TPlayer.miscEquips[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.miscEquips[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.MiscDyeIndex.Item2)
+                {
+                    //93-98
+                    var index = i - NetItem.MiscDyeIndex.Item1;
+                    player.TPlayer.miscDyes[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.miscDyes[index].netID != 0)
+                    {
+                        player.TPlayer.miscDyes[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.miscDyes[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.PiggyIndex.Item2)
+                {
+                    //98-138
+                    var index = i - NetItem.PiggyIndex.Item1;
+                    player.TPlayer.bank.item[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.bank.item[index].netID != 0)
+                    {
+                        player.TPlayer.bank.item[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.bank.item[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.SafeIndex.Item2)
+                {
+                    //138-178
+                    var index = i - NetItem.SafeIndex.Item1;
+                    player.TPlayer.bank2.item[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.bank2.item[index].netID != 0)
+                    {
+                        player.TPlayer.bank2.item[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.bank2.item[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.TrashIndex.Item2)
+                {
+                    //179-219
+                    var index = i - NetItem.TrashIndex.Item1;
+                    player.TPlayer.trashItem.netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.trashItem.netID != 0)
+                    {
+                        player.TPlayer.trashItem.stack = c.inventory[i].Stack;
+                        player.TPlayer.trashItem.prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else
+                {
+                    //220
+                    var index = i - NetItem.ForgeIndex.Item1;
+                    player.TPlayer.bank3.item[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.bank3.item[index].netID != 0)
+                    {
+                        player.TPlayer.bank3.item[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.bank3.item[index].Prefix((byte)c.inventory[i].PrefixId);
+                    }
+
+                }
+            }
+
+            float slot = 0f;
+            for (int k = 0; k < NetItem.InventorySlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].inventory[k].Name), player.Index, slot, (float)Main.player[player.Index].inventory[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.ArmorSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].armor[k].Name), player.Index, slot, (float)Main.player[player.Index].armor[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.DyeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].dye[k].Name), player.Index, slot, (float)Main.player[player.Index].dye[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscEquipSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].miscEquips[k].Name), player.Index, slot, (float)Main.player[player.Index].miscEquips[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscDyeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].miscDyes[k].Name), player.Index, slot, (float)Main.player[player.Index].miscDyes[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.PiggySlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].bank.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank.item[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.SafeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].bank2.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank2.item[k].prefix);
+                slot++;
+            }
+            NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].trashItem.Name), player.Index, slot++, (float)Main.player[player.Index].trashItem.prefix);
+            for (int k = 0; k < NetItem.ForgeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].bank3.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank3.item[k].prefix);
+                slot++;
+            }
+
+
+            NetMessage.SendData(4, -1, -1, NetworkText.FromLiteral(player.Name), player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(42, -1, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(16, -1, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+
+            slot = 0f;
+            for (int k = 0; k < NetItem.InventorySlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].inventory[k].Name), player.Index, slot, (float)Main.player[player.Index].inventory[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.ArmorSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].armor[k].Name), player.Index, slot, (float)Main.player[player.Index].armor[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.DyeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].dye[k].Name), player.Index, slot, (float)Main.player[player.Index].dye[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscEquipSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].miscEquips[k].Name), player.Index, slot, (float)Main.player[player.Index].miscEquips[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscDyeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].miscDyes[k].Name), player.Index, slot, (float)Main.player[player.Index].miscDyes[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.PiggySlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].bank.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank.item[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.SafeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].bank2.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank2.item[k].prefix);
+                slot++;
+            }
+            NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].trashItem.Name), player.Index, slot++, (float)Main.player[player.Index].trashItem.prefix);
+            for (int k = 0; k < NetItem.ForgeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].bank3.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank3.item[k].prefix);
+                slot++;
+            }
+
+
+
+            NetMessage.SendData(4, player.Index, -1, NetworkText.FromLiteral(player.Name), player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(42, player.Index, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(16, player.Index, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+
+            for (int k = 0; k < 22; k++)
+            {
+                player.TPlayer.buffType[k] = 0;
+            }
+
+            /*
+			 * The following packets are sent twice because the server will not send a packet to a client
+			 * if they have not spawned yet if the remoteclient is -1
+			 * This is for when players login via uuid or serverpassword instead of via
+			 * the login command.
+			 */
+            NetMessage.SendData(50, -1, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(50, player.Index, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+
+            NetMessage.SendData(76, player.Index, -1, NetworkText.Empty, player.Index);
+            NetMessage.SendData(76, -1, -1, NetworkText.Empty, player.Index);
+
+            NetMessage.SendData(39, player.Index, -1, NetworkText.Empty, 400);
+            #endregion
+
             info.classInfo = c;
             info.preview = false;
             player.SendInfoMessage(c.name + " selected.");
             TempClassStorage x = new TempClassStorage(c, player);
-            foreach(Ammo a in c.ammo)
+            player.IgnoreSSCPackets = false;
+            foreach(Ammo a in c.ammo.ToArray())
             {
                 pAmmo.Add(new ProgressiveAmmo(a.refresh, a.item, a.quantity, a.maxCount, a.prefix, 0, player));
             }
-            foreach (Buff b in c.buffs)
+            foreach (Buff b in c.buffs.ToArray())
             {
                 pBuff.Add(new ProgressiveBuff(b.id, b.duration, 0, player));
             }
-            foreach (ItemBuff i in c.itembuffs)
+            foreach (ItemBuff i in c.itembuffs.ToArray())
             {
                 pItemBuff.Add(new ProgressiveItemBuff(i.id, i.duration, i.item, 0, player));
             }
             gameClasses.Add(x);
         }
 
-        public void previewclass(TSPlayer player, string className)
+        public void previewclass(TSPlayer pl, string className)
         {
+            classes.Clear();
+            class_db.LoadClasses(ref classes);
+            TSPlayer player = TShock.Players[pl.Index];
             PlayerInfo info = player.GetPlayerInfo();
-            Classvar c = ClassInfo.ClassLookup(className, classes);
-            if (c == null)
+            List<Classvar> z = ClassInfo.ClassLookup(className, classes);
+            if (z.Count > 1)
             {
-                player.SendErrorMessage("Class " + className + " not found.");
+                List<string> names = new List<string>();
+                foreach (Classvar a in z)
+                {
+                    names.Add(a.name);
+                }
+                string y = string.Join(", ", names);
+                player.SendErrorMessage("Multiple classes found: ");
+                player.SendErrorMessage(y);
                 return;
             }
-            if (info.backup != null)
+            if (z.Count == 0)
+            {
+                player.SendErrorMessage("No classes found.");
+            }
+            Classvar c = z[0];
+            resetClass(player);
+            if (info.backup == null)
             {
                 info.backup = new PlayerData(player);
+                info.backup.CopyCharacter(player);
             }
             info.preview = true;
-            player.PlayerData.inventory = c.inventory;
-            player.PlayerData.maxHealth = c.maxHealth;
+            //player.PlayerData.inventory = c.inventory;
+            player.IgnoreSSCPackets = true;
             player.PlayerData.health = c.maxHealth;
-            player.PlayerData.extraSlot = c.extraSlot;
-            player.PlayerData.maxMana = c.maxMana;
-            player.PlayerData.mana = c.maxMana;
+            player.PlayerData.maxHealth = c.maxHealth;
+            player.TPlayer.statLifeMax2 = c.maxHealth;
+            player.TPlayer.statLifeMax = c.maxHealth;
+            player.TPlayer.statLife = c.maxHealth;
+            player.TPlayer.statManaMax = c.maxMana;
+            player.TPlayer.statMana = c.maxMana;
+            if (c.extraSlot != null)
+                player.TPlayer.extraAccessory = c.extraSlot.Value == 1 ? true : false;
+
+            #region invCopy
+            for (int i = 0; i < NetItem.MaxInventory; i++)
+            {
+                if (i < NetItem.InventoryIndex.Item2)
+                {
+                    //0-58
+                    player.TPlayer.inventory[i].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.inventory[i].netID != 0)
+                    {
+                        player.TPlayer.inventory[i].stack = c.inventory[i].Stack;
+                        player.TPlayer.inventory[i].prefix = c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.ArmorIndex.Item2)
+                {
+                    //59-78
+                    var index = i - NetItem.ArmorIndex.Item1;
+                    player.TPlayer.armor[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.armor[index].netID != 0)
+                    {
+                        player.TPlayer.armor[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.armor[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.DyeIndex.Item2)
+                {
+                    //79-88
+                    var index = i - NetItem.DyeIndex.Item1;
+                    player.TPlayer.dye[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.dye[index].netID != 0)
+                    {
+                        player.TPlayer.dye[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.dye[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.MiscEquipIndex.Item2)
+                {
+                    //89-93
+                    var index = i - NetItem.MiscEquipIndex.Item1;
+                    player.TPlayer.miscEquips[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.miscEquips[index].netID != 0)
+                    {
+                        player.TPlayer.miscEquips[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.miscEquips[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.MiscDyeIndex.Item2)
+                {
+                    //93-98
+                    var index = i - NetItem.MiscDyeIndex.Item1;
+                    player.TPlayer.miscDyes[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.miscDyes[index].netID != 0)
+                    {
+                        player.TPlayer.miscDyes[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.miscDyes[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.PiggyIndex.Item2)
+                {
+                    //98-138
+                    var index = i - NetItem.PiggyIndex.Item1;
+                    player.TPlayer.bank.item[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.bank.item[index].netID != 0)
+                    {
+                        player.TPlayer.bank.item[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.bank.item[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.SafeIndex.Item2)
+                {
+                    //138-178
+                    var index = i - NetItem.SafeIndex.Item1;
+                    player.TPlayer.bank2.item[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.bank2.item[index].netID != 0)
+                    {
+                        player.TPlayer.bank2.item[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.bank2.item[index].prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else if (i < NetItem.TrashIndex.Item2)
+                {
+                    //179-219
+                    var index = i - NetItem.TrashIndex.Item1;
+                    player.TPlayer.trashItem.netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.trashItem.netID != 0)
+                    {
+                        player.TPlayer.trashItem.stack = c.inventory[i].Stack;
+                        player.TPlayer.trashItem.prefix = (byte)c.inventory[i].PrefixId;
+                    }
+                }
+                else
+                {
+                    //220
+                    var index = i - NetItem.ForgeIndex.Item1;
+                    player.TPlayer.bank3.item[index].netDefaults(c.inventory[i].NetId);
+
+                    if (player.TPlayer.bank3.item[index].netID != 0)
+                    {
+                        player.TPlayer.bank3.item[index].stack = c.inventory[i].Stack;
+                        player.TPlayer.bank3.item[index].Prefix((byte)c.inventory[i].PrefixId);
+                    }
+
+                }
+            }
+
+            float slot = 0f;
+            for (int k = 0; k < NetItem.InventorySlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].inventory[k].Name), player.Index, slot, (float)Main.player[player.Index].inventory[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.ArmorSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].armor[k].Name), player.Index, slot, (float)Main.player[player.Index].armor[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.DyeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].dye[k].Name), player.Index, slot, (float)Main.player[player.Index].dye[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscEquipSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].miscEquips[k].Name), player.Index, slot, (float)Main.player[player.Index].miscEquips[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscDyeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].miscDyes[k].Name), player.Index, slot, (float)Main.player[player.Index].miscDyes[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.PiggySlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].bank.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank.item[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.SafeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].bank2.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank2.item[k].prefix);
+                slot++;
+            }
+            NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].trashItem.Name), player.Index, slot++, (float)Main.player[player.Index].trashItem.prefix);
+            for (int k = 0; k < NetItem.ForgeSlots; k++)
+            {
+                NetMessage.SendData(5, -1, -1, NetworkText.FromLiteral(Main.player[player.Index].bank3.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank3.item[k].prefix);
+                slot++;
+            }
+
+
+            NetMessage.SendData(4, -1, -1, NetworkText.FromLiteral(player.Name), player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(42, -1, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(16, -1, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+
+            slot = 0f;
+            for (int k = 0; k < NetItem.InventorySlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].inventory[k].Name), player.Index, slot, (float)Main.player[player.Index].inventory[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.ArmorSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].armor[k].Name), player.Index, slot, (float)Main.player[player.Index].armor[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.DyeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].dye[k].Name), player.Index, slot, (float)Main.player[player.Index].dye[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscEquipSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].miscEquips[k].Name), player.Index, slot, (float)Main.player[player.Index].miscEquips[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.MiscDyeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].miscDyes[k].Name), player.Index, slot, (float)Main.player[player.Index].miscDyes[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.PiggySlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].bank.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank.item[k].prefix);
+                slot++;
+            }
+            for (int k = 0; k < NetItem.SafeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].bank2.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank2.item[k].prefix);
+                slot++;
+            }
+            NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].trashItem.Name), player.Index, slot++, (float)Main.player[player.Index].trashItem.prefix);
+            for (int k = 0; k < NetItem.ForgeSlots; k++)
+            {
+                NetMessage.SendData(5, player.Index, -1, NetworkText.FromLiteral(Main.player[player.Index].bank3.item[k].Name), player.Index, slot, (float)Main.player[player.Index].bank3.item[k].prefix);
+                slot++;
+            }
+
+
+
+            NetMessage.SendData(4, player.Index, -1, NetworkText.FromLiteral(player.Name), player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(42, player.Index, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(16, player.Index, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+
+            for (int k = 0; k < 22; k++)
+            {
+                player.TPlayer.buffType[k] = 0;
+            }
+
+            /*
+			 * The following packets are sent twice because the server will not send a packet to a client
+			 * if they have not spawned yet if the remoteclient is -1
+			 * This is for when players login via uuid or serverpassword instead of via
+			 * the login command.
+			 */
+            NetMessage.SendData(50, -1, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+            NetMessage.SendData(50, player.Index, -1, NetworkText.Empty, player.Index, 0f, 0f, 0f, 0);
+
+            NetMessage.SendData(76, player.Index, -1, NetworkText.Empty, player.Index);
+            NetMessage.SendData(76, -1, -1, NetworkText.Empty, player.Index);
+
+            NetMessage.SendData(39, player.Index, -1, NetworkText.Empty, 400);
+        #endregion
+
             info.classInfo = c;
+
             player.SendInfoMessage("Previewing " + c.name + ".");
-            player.SendInfoMessage("Inventory will revert on /class select, /class preview, or in 60 seconds.");
-            Task.Delay(60000).ContinueWith(t => resetClass(player));
+            player.SendInfoMessage("Inventory will revert on /class select, /class preview, or in 20 seconds.");
+            Task.Delay(20000).ContinueWith(t => resetClassPreview(player));
         }
 
-        public void resetClass(TSPlayer player)
+        public void resetClassPreview(TSPlayer pl)
         {
+            TSPlayer player = TShock.Players[pl.Index];
+            PlayerInfo info = player.GetPlayerInfo();
+            if (player.Dead)
+            {
+                Task.Delay(1000).ContinueWith(t => resetClassPreview(player));
+                return;
+            }
+            if (info.preview == false)
+            {
+                return;
+            }
+            else
+            {
+                player.SendInfoMessage("Preview automatically ended.");
+            }
+            if (info.Restore(player))
+            {
+                player.SendInfoMessage("Inventory restored.");
+            }
+            else
+            {
+                player.SendErrorMessage("Unable to restore inventory.");
+            }
+            info.preview = false;
+            #region listRemoval
+            foreach (ProgressiveAmmo ammo in pAmmo.ToArray())
+            {
+                if (ammo.player == player)
+                {
+                    pAmmo.Remove(ammo);
+                }
+            }
+            foreach (ProgressiveItemBuff iBuff in pItemBuff.ToArray())
+            {
+                if (iBuff.player == player)
+                {
+                    pItemBuff.Remove(iBuff);
+                }
+            }
+            foreach (ProgressiveBuff _buff in pBuff.ToArray())
+            {
+                if (_buff.player == player)
+                {
+                    pBuff.Remove(_buff);
+                }
+            }
+            #endregion
+        }
+
+        public void resetClass(TSPlayer pl)
+        {
+            TSPlayer player = TShock.Players[pl.Index];
             PlayerInfo info = player.GetPlayerInfo();
             if (player.Dead)
             {
@@ -307,7 +874,7 @@ namespace ClassWars
             }
             if (info.preview == false)
             {
-                foreach(TempClassStorage t in gameClasses)
+                foreach(TempClassStorage t in gameClasses.ToArray())
                 {
                     if (t.player == player)
                     {
@@ -316,30 +883,42 @@ namespace ClassWars
                     }
                 }
             }
-            info.Restore(player);
-            player.SendInfoMessage("Preview automatically ended.");
+            else
+            {
+                player.SendInfoMessage("Preview automatically ended.");
+            }
+            if (info.Restore(player))
+            {
+                player.SendInfoMessage("Inventory restored.");
+            }
+            else
+            {
+                player.SendErrorMessage("Unable to restore inventory.");
+            }
             info.preview = false;
-            foreach(ProgressiveAmmo ammo in pAmmo)
+            #region listRemoval
+            foreach(ProgressiveAmmo ammo in pAmmo.ToArray())
             {
                 if (ammo.player == player)
                 {
                     pAmmo.Remove(ammo);
                 }
             }
-            foreach(ProgressiveItemBuff iBuff in pItemBuff)
+            foreach(ProgressiveItemBuff iBuff in pItemBuff.ToArray())
             {
                 if (iBuff.player == player)
                 {
                     pItemBuff.Remove(iBuff);
                 }
             }
-            foreach(ProgressiveBuff _buff in pBuff)
+            foreach(ProgressiveBuff _buff in pBuff.ToArray())
             {
                 if (_buff.player == player)
                 {
                     pBuff.Remove(_buff);
                 }
             }
+#endregion
         }
         #endregion
 
@@ -458,18 +1037,18 @@ namespace ClassWars
 
         public void tickClasses(object sender, ElapsedEventArgs e)
         {
-            foreach (ProgressiveBuff b in pBuff)
+            foreach (ProgressiveBuff b in pBuff.ToArray())
             {
                 buffPlayer(b.player, b.id, b.duration);
             }
-            foreach (ProgressiveItemBuff i in pItemBuff)
+            foreach (ProgressiveItemBuff i in pItemBuff.ToArray())
             {
                 if (i.player.TPlayer.inventory[i.player.TPlayer.selectedItem].Name == TShock.Utils.GetItemById(i.item).Name)
                 {
                     buffPlayer(i.player, i.id, i.duration);
                 }
             }
-            foreach (ProgressiveAmmo a in pAmmo)
+            foreach (ProgressiveAmmo a in pAmmo.ToArray())
             {
                 Item i = TShock.Utils.GetItemById(a.item);
                 if (a.count <= 0)
@@ -507,13 +1086,13 @@ namespace ClassWars
                 count = count + player.TPlayer.trashItem.stack;
             return count;
         }
-
+        
         public void buffPlayer(TSPlayer player, int buffID, int duration)
         {
             if (buffID == 94)
             {
                 player.TPlayer.ClearBuff(94);
-                player.SetBuff(buffID, duration);
+                player.SetBuff(buffID, duration * 60);
                 return;
             }
             player.SetBuff(buffID, duration * 60);
@@ -558,9 +1137,13 @@ namespace ClassWars
                     {
                         color = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].wallColor();
                         if (color == bluePaintID)
+                        {
                             blueBunkerCount = 1;
+                        }
                         if (color == redPaintID)
+                        {
                             redBunkerCount = 1;
+                        }
                     }
                 }
             }
@@ -615,8 +1198,8 @@ namespace ClassWars
             TShock.Utils.Broadcast("Total Game Time: " + elapsed.Hours + " Hours, " + elapsed.Minutes + " Minutes, " + elapsed.Seconds+ " Seconds.", winningTeam);
             TShock.Utils.Broadcast("=====================", winningTeam);
             Refill();
-            tempClasses = null;
-            gameClasses = null;
+            tempClasses.Clear();
+            gameClasses.Clear();
         }
         #endregion
 
@@ -703,16 +1286,16 @@ namespace ClassWars
                 }
                 arenaNames.RemoveAll(delegate (string s) { return s == name; });
                 arena_db.DeleteArenaByName(name);
-                Arena temp = null;
-                foreach (Arena arena in _arenas)
+                foreach (Arena arena in _arenas.ToArray())
                 {
                     if (arena.name == name)
                     {
-                        temp = arena;
+                        _arenas.Remove(arena);
+                        player.SendMessage("Arena " + arena.name + "removed.", Color.LimeGreen);
+                        return;
                     }
                 }
-                _arenas.Remove(temp);
-                player.SendMessage("Arena " + temp.name + "removed.", Color.LimeGreen);
+                player.SendErrorMessage("dafuq #372");
                 return;
             }
             #endregion
@@ -1063,6 +1646,11 @@ namespace ClassWars
                     player.SendErrorMessage("Usage: /class select [name]");
                     return;
                 }
+                if (args.Parameters[0] == "none")
+                {
+                    resetClass(player);
+                    return;
+                }
                 setclass(player, args.Parameters[0]);
                 return;
             }
@@ -1076,8 +1664,9 @@ namespace ClassWars
                 {
                     if (!categories.Contains(c.category))
                         categories.Add(c.category);
-                } 
-                if (args.Parameters.Count > 0)
+                }
+                int a;
+                if (args.Parameters.Count > 0 && int.TryParse(args.Parameters[0], out a))
                 {
                     if (args.Parameters[0] == "category" || args.Parameters[0] == "categories")
                     {
@@ -1093,26 +1682,23 @@ namespace ClassWars
                             });
                         return;
                     }
-                    if (categories.Contains(args.Parameters[0]))
+                    foreach(Classvar c in classes)
                     {
-                        foreach(Classvar c in classes)
-                        {
-                            if (c.category == args.Parameters[0])
-                                temp.Add(c);
-                        }
-                        if (!PaginationTools.TryParsePageNumber(args.Parameters, 0, args.Player, out pagenum))
-                            return;
-                        IEnumerable<string> classList = from Classvar in temp
-                                                        select Classvar.name;
-                        PaginationTools.SendPage(player, pagenum, PaginationTools.BuildLinesFromTerms(classList),
-                            new PaginationTools.Settings
-                            {
-                                HeaderFormat = "Classes in Category \"" + args.Parameters[0] + "\" :",
-                                FooterFormat = "type /class list " + args.Parameters[0] + " {{0}}",
-                                NothingToDisplayString = "No classes in this category are presently defined."
-                            });
-                        return;
+                        if (c.category == args.Parameters[0])
+                            temp.Add(c);
                     }
+                    if (!PaginationTools.TryParsePageNumber(args.Parameters, 0, args.Player, out pagenum))
+                        return;
+                    IEnumerable<string> classList = from Classvar in temp
+                                                    select Classvar.name;
+                    PaginationTools.SendPage(player, pagenum, PaginationTools.BuildLinesFromTerms(classList),
+                        new PaginationTools.Settings
+                        {
+                            HeaderFormat = "Classes in Category \"" + args.Parameters[0] + "\" :",
+                            FooterFormat = "type /class list " + args.Parameters[0] + " {{0}}",
+                            NothingToDisplayString = "No classes in this category are presently defined."
+                        });
+                    return;
                 }
                 if (!PaginationTools.TryParsePageNumber(args.Parameters, 0, args.Player, out pagenum))
                     return;
@@ -1177,6 +1763,7 @@ namespace ClassWars
                     return;
                 }
                 string name = args.Parameters[0];
+                player.SaveServerCharacter();
                 NetItem[] inv = player.PlayerData.inventory;
                 int maxHP = player.PlayerData.maxHealth;
                 int maxMana = player.PlayerData.maxMana;
@@ -1186,11 +1773,18 @@ namespace ClassWars
                     if (c.name == name)
                     {
                         player.SendErrorMessage("Class " + c.name + " already exists");
+                        return;
                     }
                 }
-                Classvar temp = new Classvar(name, null, null, null, null, null, inv, maxHP, maxMana, extraSlot);
-                classes.Add(temp);
+                List<string> a = new List<string>();
+                List<Buff> b = new List<Buff>();
+                List<ItemBuff> ib = new List<ItemBuff>();
+                List<Ammo> _ammo = new List<Ammo>();
+                Classvar temp = new Classvar(name, "general", a, b, ib, _ammo, inv, maxHP, maxMana, extraSlot);
                 class_db.AddClass(temp);
+                classes.Clear();
+                class_db.LoadClasses(ref classes);
+                player.SendInfoMessage(temp.name + " successfully added.");
                 return;
             }
 
@@ -1212,12 +1806,14 @@ namespace ClassWars
                         return;
                     }
                     string cat = args.Parameters[2];
-                    foreach(Classvar c in classes)
+                    foreach(Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
                             c.category = cat;
                             class_db.UpdateClass(c);
+                            classes.Clear();
+                            class_db.LoadClasses(ref classes);
                             player.SendSuccessMessage(c.name + " is now part of category \"" + c.category + "\"");
                             return;
                         }
@@ -1241,13 +1837,14 @@ namespace ClassWars
                     }
                     if (args.Parameters[2] == "del")
                     {
-                        foreach (Classvar c in classes)
+                        foreach (Classvar c in classes.ToArray())
                         {
                             if (c.name == name)
                             {
                                 player.SendSuccessMessage("Class " + c.name + " deleted.");
                                 class_db.DeleteClass(c.name);
-                                classes.Remove(c);
+                                classes.Clear();
+                                class_db.LoadClasses(ref classes);
                                 return;
                             }
                         }
@@ -1256,12 +1853,14 @@ namespace ClassWars
                     }
                     if (args.Parameters[2] == "add")
                     {
-                        foreach (Classvar c in classes)
+                        foreach (Classvar c in classes.ToArray())
                         {
                             if (c.name == name)
                             {
-                                c.description.Add(args.Parameters[4]);
+                                c.description.Add(args.Parameters[3]);
                                 class_db.UpdateClass(c);
+                                classes.Clear();
+                                class_db.LoadClasses(ref classes);
                                 player.SendInfoMessage("Current description for " + c.name + ".");
                                 foreach (string x in c.description)
                                 {
@@ -1280,13 +1879,16 @@ namespace ClassWars
 
                 if (param2 == "inv")
                 {
-                    foreach(Classvar c in classes)
+                    foreach(Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
-                            c.inventory = player.PlayerData.inventory;
-                            c.extraSlot = player.PlayerData.extraSlot;
+                            player.SaveServerCharacter();
+                            NetItem[] inv = player.PlayerData.inventory;
+                            c.inventory = inv;
                             class_db.UpdateClass(c);
+                            classes.Clear();
+                            class_db.LoadClasses(ref classes);
                             player.SendSuccessMessage(c.name + "'s inventory has been udpated.");
                             return;
                         }
@@ -1297,13 +1899,13 @@ namespace ClassWars
 
                 if (param2 == "stats" || param2 == "stat")
                 {
-                    foreach(Classvar c in classes)
+                    foreach(Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
-                            c.maxHealth = player.PlayerData.maxHealth;
-                            c.maxMana = player.PlayerData.maxMana;
                             class_db.UpdateClass(c);
+                            classes.Clear();
+                            class_db.LoadClasses(ref classes);
                             player.SendSuccessMessage(c.name + " HP: " + c.maxHealth + ", Mana: " + c.maxMana);
                             return;
                         }
@@ -1318,13 +1920,13 @@ namespace ClassWars
                     player.SendErrorMessage("Usage: /class del [name]");
                     return;
                 }
-                foreach(Classvar c in classes)
+                foreach(Classvar c in classes.ToArray())
                 {
                     if (c.name == args.Parameters[0])
                     {
-                        player.SendSuccessMessage(c.name + " deleted.");
                         class_db.DeleteClass(c.name);
                         classes.Remove(c);
+                        player.SendSuccessMessage(c.name + " deleted.");
                         return;
                     }
                 }
@@ -1337,6 +1939,7 @@ namespace ClassWars
                 if (args.Parameters.Count < 3)
                 {
                     player.SendErrorMessage("/class buff [add|del] [name] [buff] [duration]");
+                    return;
                 }
 
                 string param2 = args.Parameters[0];
@@ -1344,7 +1947,7 @@ namespace ClassWars
                 string name = args.Parameters[0];
                 args.Parameters.RemoveAt(0);
 
-                var buffs = TShock.Utils.GetBuffByName(args.Parameters[0]);
+                List<int> buffs = TShock.Utils.GetBuffByName(args.Parameters[0]);
                 if (buffs.Count == 0)
                 {
                     player.SendErrorMessage("Buff not found.");
@@ -1369,13 +1972,15 @@ namespace ClassWars
                         player.SendErrorMessage("Unable to parse duration");
                         return;
                     }
-                    foreach (Classvar c in classes)
+                    foreach (Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
                             c.buffs.Add(new Buff(buffs[0], duration));
                             player.SendSuccessMessage(TShock.Utils.GetBuffName(buffs[0]) + " added to " + c.name + " with a " + duration + " second duration.");
                             class_db.UpdateClass(c);
+                            classes.Clear();
+                            class_db.LoadClasses(ref classes);
                             return;
                         }
                     }
@@ -1385,19 +1990,23 @@ namespace ClassWars
 
                 if (param2 == "del")
                 {
-                    foreach(Classvar c in classes)
+                    foreach(Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
-                            foreach (Buff b in c.buffs)
+                            int i = 0;
+                            foreach (Buff b in c.buffs.ToArray())
                             {
                                 if (b.id == buffs[0])
                                 {
                                     player.SendSuccessMessage(TShock.Utils.GetBuffName(b.id) + " removed from " + c.name + ".");
-                                    c.buffs.Remove(b);
+                                    c.buffs.RemoveAt(i);
                                     class_db.UpdateClass(c);
+                                    classes.Clear();
+                                    class_db.LoadClasses(ref classes);
                                     return;
                                 }
+                                i++;
                             }
                             player.SendErrorMessage(c.name + " does not have buff " + TShock.Utils.GetBuffName(buffs[0]) + ".");
                             return;
@@ -1448,13 +2057,15 @@ namespace ClassWars
                         player.SendErrorMessage("Unable to parse duration");
                         return;
                     }
-                    foreach (Classvar c in classes)
+                    foreach (Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
                             c.itembuffs.Add(new ItemBuff(buffs[0], duration, tempItem.netID));
                             player.SendSuccessMessage(c.name + " now gains " + TShock.Utils.GetBuffName(buffs[0]) + " while holding " + tempItem.Name + ".");
                             class_db.UpdateClass(c);
+                            classes.Clear();
+                            class_db.LoadClasses(ref classes);
                             return;
                         }
                     }
@@ -1464,20 +2075,25 @@ namespace ClassWars
 
                 if (param2 == "del")
                 {
-                    foreach (Classvar c in classes)
+                    foreach (Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
-                            foreach(ItemBuff i in c.itembuffs)
+                            int _i = 0;
+                            foreach(ItemBuff i in c.itembuffs.ToArray())
                             {
                                 if (i.id == buffs[0])
                                 {
                                     player.SendSuccessMessage(TShock.Utils.GetBuffName(i.id) + " removed from " + c.name + "'s " + tempItem.Name + ".");
-                                    c.itembuffs.Remove(i);
+                                    c.itembuffs.RemoveAt(_i);
                                     class_db.UpdateClass(c);
+                                    classes.Clear();
+                                    class_db.LoadClasses(ref classes);
                                     return;
                                 }
+                                _i++;
                             }
+                            _i = 0;
                             player.SendErrorMessage(c.name + " does not contain itembuff " + TShock.Utils.GetBuffName(buffs[0]) + ".");
                             return;
                         }
@@ -1524,13 +2140,16 @@ namespace ClassWars
                     {
                         player.SendErrorMessage("Maximum ammo count must be at least 1");
                     }
-                    foreach(Classvar c in classes)
+                    foreach(Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
                             c.ammo.Add(new Ammo(refresh, tempItem.netID, tempItem.stack, maxAmmo, tempItem.prefix));
                             class_db.UpdateClass(c);
-                            player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.prefix + " " + tempItem.Name + " every " + refresh + " seconds.");
+                            if (tempItem.prefix == 0)
+                                player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " + tempItem.Name + " every " + refresh + " seconds.");
+                            else
+                                player.SendSuccessMessage(c.name + " will now recieve " + tempItem.stack + " " +  TShock.Utils.GetPrefixById(tempItem.prefix) + " " + tempItem.Name + " every " + refresh + " seconds.");
                             return;
                         }
                     }
@@ -1540,17 +2159,19 @@ namespace ClassWars
 
                 if (param2 == "del")
                 {
-                    foreach(Classvar c in classes)
+                    foreach(Classvar c in classes.ToArray())
                     {
                         if (c.name == name)
                         {
-                            foreach (Ammo a in c.ammo)
+                            foreach (Ammo a in c.ammo.ToArray())
                             {
                                 if (a.item == tempItem.netID)
                                 {
                                     player.SendSuccessMessage(TShock.Utils.GetItemById(a.item).Name + " will no longer be refilled for " + c.name + ".");
                                     c.ammo.Remove(a);
                                     class_db.UpdateClass(c);
+                                    classes.Clear();
+                                    class_db.LoadClasses(ref classes);
                                     return;
                                 }
                             }

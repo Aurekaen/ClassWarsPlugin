@@ -63,6 +63,7 @@ namespace ClassWars
                     b.duration = e;
                     temp.Add(b);
                 }
+                b = new Buff(0, 0);
             }
             return temp;
         }
@@ -94,6 +95,7 @@ namespace ClassWars
                     b.item = f;
                     temp.Add(b);
                 }
+                b = new ItemBuff(0, 0, 0);
             }
             return temp;
         }
@@ -128,6 +130,7 @@ namespace ClassWars
                     b.prefix = h;
                     temp.Add(b);
                 }
+                b = new Ammo(0, 0, 0, 0, 0);
             }
             return temp;
         }

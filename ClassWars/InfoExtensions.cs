@@ -15,15 +15,20 @@ namespace ClassWars
 
     public static class ClassInfo
     {
-        public static Classvar ClassLookup(string name, List<Classvar> classes)
+        public static List<Classvar> ClassLookup(string name, List<Classvar> classes)
         {
+            List<Classvar> x = new List<Classvar>();
+            bool found = false;
             foreach (Classvar c in classes)
             {
-                if (c.name == name)
+                if (c.name.StartsWith(name) || c.name == name)
                 {
-                    return c;
+                    found = true;
+                    x.Add(c);
                 }
             }
+            if (found)
+                return x;
             return null;
         }
     }
