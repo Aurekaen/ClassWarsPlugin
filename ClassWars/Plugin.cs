@@ -126,19 +126,19 @@ namespace ClassWars
                     int blockY = data.ReadInt16();
                     if (action == 0)
                     {
-                        CheckWins();
-                        Task.Delay(1000).ContinueWith(t => CheckWins());
                         if (Main.tile[blockX, blockY].type != 203 && Main.tile[blockX, blockY].type != 25 && Main.tile[blockX, blockY].type != 117)
                         {
-                            if (isMiner(args.Msg.whoAmI))
+                            if (blueTeam.Contains(TShock.Players[args.Msg.whoAmI]) || redTeam.Contains(TShock.Players[args.Msg.whoAmI]))
                             {
-                                if (blueTeam.Contains(TShock.Players[args.Msg.whoAmI]) || redTeam.Contains(TShock.Players[args.Msg.whoAmI]))
-                                {
-                                    args.Handled = true;
-                                    TShock.Players[args.Msg.whoAmI].SendTileSquare(blockX, blockY, 4);
-                                    return;
-                                }
+                                args.Handled = true;
+                                TShock.Players[args.Msg.whoAmI].SendTileSquare(blockX, blockY, 4);
+                                return;
                             }
+                        }
+                        else
+                        {
+                            CheckWins();
+                            Task.Delay(1000).ContinueWith(t => CheckWins());
                         }
                     }
                 }
@@ -1099,7 +1099,7 @@ namespace ClassWars
             return;
         }
 
-        public void Refill()
+        /*public void Refill()
         {
             Arena arena = _arenas[arenaIndex];
             for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
@@ -1108,17 +1108,94 @@ namespace ClassWars
                 {
                     int x = (int)arena.arenaTopL.X + i;
                     int y = (int)arena.arenaTopL.Y + j;
-                    var tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j];
+                    OTAPI.Tile.ITile tile = Main.tile[x, y];
                     if (tile.wallColor() == bluePaintID || tile.wallColor() == redPaintID)
                     {
                         if (tile.wall == 195)
-                            tile.type = 203;
+                            SetTile(x, y, 203);
                         if (tile.wall == 190)
-                            tile.type = 25;
+                            SetTile(x, y, 25);
                         if (tile.wall == 200)
-                            tile.type = 117;
+                            SetTile(x, y, 117);
                     }
                 }
+            }
+            ResetSection();
+        }*/
+        public void Refill()
+        {
+            TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//all");
+            TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 25 => wall = 190");
+            TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 117 => wall = 200");
+            TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 203 => wall = 195");
+        }
+
+        public void ResetSection()
+        {
+            Arena arena = _arenas[arenaIndex];
+            int x = (int)arena.arenaBottomR.X;
+            int x2 = (int)arena.arenaTopL.X;
+            int y = (int)arena.arenaBottomR.Y;
+            int y2 = (int)arena.arenaTopL.Y;
+            int lowX = Netplay.GetSectionX(x);
+            int highX = Netplay.GetSectionX(x2);
+            int lowY = Netplay.GetSectionY(y);
+            int highY = Netplay.GetSectionY(y2);
+            foreach (RemoteClient sock in Netplay.Clients.Where(s => s.IsActive))
+            {
+                for (int i = lowX; i <= highX; i++)
+                {
+                    for (int j = lowY; j <= highY; j++)
+                        sock.TileSections[i, j] = false;
+                }
+            }
+        }
+
+        public void SetTile(int i, int j, int tileType)
+        {
+            var tile = Main.tile[i, j];
+            switch (tileType)
+            {
+                case -1:
+                    tile.active(false);
+                    tile.frameX = -1;
+                    tile.frameY = -1;
+                    tile.liquidType(0);
+                    tile.liquid = 0;
+                    tile.type = 0;
+                    return;
+                case -2:
+                    tile.active(false);
+                    tile.liquidType(1);
+                    tile.liquid = 255;
+                    tile.type = 0;
+                    return;
+                case -3:
+                    tile.active(false);
+                    tile.liquidType(2);
+                    tile.liquid = 255;
+                    tile.type = 0;
+                    return;
+                case -4:
+                    tile.active(false);
+                    tile.liquidType(0);
+                    tile.liquid = 255;
+                    tile.type = 0;
+                    return;
+                default:
+                    if (Main.tileFrameImportant[tileType])
+                        WorldGen.PlaceTile(i, j, tileType);
+                    else
+                    {
+                        tile.active(true);
+                        tile.frameX = -1;
+                        tile.frameY = -1;
+                        tile.liquidType(0);
+                        tile.liquid = 0;
+                        tile.slope(0);
+                        tile.type = (ushort)tileType;
+                    }
+                    return;
             }
         }
 
@@ -1127,6 +1204,9 @@ namespace ClassWars
             Arena arena = _arenas[arenaIndex];
             blueBunkerCount = 0;
             redBunkerCount = 0;
+            var time = System.DateTime.Now;
+            File.WriteAllText(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + time, arena.name + arena.arenaTopL + arena.arenaBottomR);
+            List<string> log = new List<string>();
             for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
             {
                 for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
@@ -1139,10 +1219,12 @@ namespace ClassWars
                         if (color == bluePaintID)
                         {
                             blueBunkerCount = 1;
+                            log.Add("BlueAdd: " + "x: " + ((int)arena.arenaTopL.X + i).ToString() + ", y: " + ((int)arena.arenaTopL.Y + j).ToString() + ", color: " + color + ", type: " + tile);
                         }
                         if (color == redPaintID)
                         {
                             redBunkerCount = 1;
+                            log.Add("RedAdd: " + "x: " + ((int)arena.arenaTopL.X + i).ToString() + ", y: " + ((int)arena.arenaTopL.Y + j).ToString() + ", color: " + color + ", type: " + tile);
                         }
                     }
                 }
@@ -1161,6 +1243,7 @@ namespace ClassWars
 
         private void gameEnd (bool winner)
         {
+            Refill();
             end = DateTime.Now;
             TimeSpan elapsed = end - start;
             Arena arena = _arenas[arenaIndex];
@@ -1197,7 +1280,6 @@ namespace ClassWars
             TShock.Utils.Broadcast("Blue Team Deaths: " + blueDeathCount.ToString(), winningTeam);
             TShock.Utils.Broadcast("Total Game Time: " + elapsed.Hours + " Hours, " + elapsed.Minutes + " Minutes, " + elapsed.Seconds+ " Seconds.", winningTeam);
             TShock.Utils.Broadcast("=====================", winningTeam);
-            Refill();
             tempClasses.Clear();
             gameClasses.Clear();
         }
@@ -1502,28 +1584,28 @@ namespace ClassWars
                     }
                     GameInProgress = "none";
                     scoreCheck.Enabled = false;
+                    TShock.Utils.Broadcast("==================", Color.Red);
+                    TShock.Utils.Broadcast("Game Aborted Early", Color.Red);
+                    TShock.Utils.Broadcast("==================", Color.Red);
+                    Arena arena = _arenas[arenaIndex];
+                    Refill();
+                    foreach (TSPlayer p in redTeam)
+                    {
+                        p.Teleport(4374 * 16, 240 * 16);
+                        p.TPlayer.hostile = false;
+                        NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, p.Index, 0f, 0f, 0f);
+                        resetClass(p);
+                    }
+                    foreach (TSPlayer p in blueTeam)
+                    {
+                        p.Teleport(4374 * 16, 240 * 16);
+                        p.TPlayer.hostile = false;
+                        NetMessage.SendData((int)PacketTypes.TogglePvp, -1, -1, null, p.Index, 0f, 0f, 0f);
+                        resetClass(p);
+                    }
+
                     redTeam.Clear();
                     blueTeam.Clear();
-                    TShock.Utils.Broadcast("Game Aborted Early", Color.Red);
-                    Arena arena = _arenas[arenaIndex];
-                    for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
-                    {
-                        for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
-                        {
-                            int x = (int)arena.arenaTopL.X + i;
-                            int y = (int)arena.arenaTopL.Y + j;
-                            var tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j];
-                            if (tile.wallColor() == bluePaintID || tile.wallColor() == redPaintID)
-                            {
-                                if (tile.wall == 195)
-                                    tile.type = 203;
-                                if (tile.wall == 190)
-                                    tile.type = 25;
-                                if (tile.wall == 200)
-                                    tile.type = 117;
-                            }
-                        }
-                    }
                     Wiring.HitSwitch((int)arena.switchPos.X, (int)arena.switchPos.Y);
                     return;
                 }
