@@ -45,7 +45,9 @@ namespace ClassWars
         public static System.Timers.Timer scoreCheck = new System.Timers.Timer { Interval = 120000, AutoReset = true, Enabled = false};
         public static System.Timers.Timer countdown = new System.Timers.Timer { Interval = 1000, AutoReset = true, Enabled = false };
         public static System.Timers.Timer gameTick = new System.Timers.Timer { Interval = 1000, AutoReset = true, Enabled = true };
+        List<string> log = new List<string>();
         private int count, redDeathCount, blueDeathCount;
+        public string fileName;
         public DateTime start, end;
         #endregion
         public ClassWars(Main game) : base(game)
@@ -979,6 +981,21 @@ namespace ClassWars
             count = 5;
             countdown.Enabled = true;
             scoreCheck.Enabled = true;
+            fileName = "CW" + start.Millisecond;
+            File.WriteAllText(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName,"CW has started. Players are: ");
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
+            {
+                List<string> players = new List<string>();
+                {
+                    players.Add("Red Team:");
+                    foreach (TSPlayer player in redTeam)
+                        players.Add(player.Name);
+                    players.Add("Blue Team:");
+                    foreach (TSPlayer player in blueTeam)
+                        players.Add(player.Name);
+                    players.Add("=================");
+                }
+            }
         }
 
         public void startCountdown(object sender, ElapsedEventArgs e)
@@ -1204,9 +1221,10 @@ namespace ClassWars
             Arena arena = _arenas[arenaIndex];
             blueBunkerCount = 0;
             redBunkerCount = 0;
-            var time = System.DateTime.Now;
-            File.WriteAllText(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + time, arena.name + arena.arenaTopL + arena.arenaBottomR);
-            List<string> log = new List<string>();
+            TimeSpan currentTime = System.DateTime.Now - start;
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
+                file.WriteLine(arena.name + arena.arenaTopL + arena.arenaBottomR + "|||" + currentTime.Hours + " hours, " + currentTime . Minutes + " minutes, " + currentTime.Seconds + "seconds.");
+            log.Clear();
             for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
             {
                 for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
@@ -1243,10 +1261,46 @@ namespace ClassWars
 
         private void gameEnd (bool winner)
         {
+            Arena arena = _arenas[arenaIndex];
+            for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
+            {
+                for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
+                {
+                    int tile = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].type;
+                    int color;
+                    if (tile == 25 || tile == 203 || tile == 117)
+                    {
+                        color = Main.tile[(int)arena.arenaTopL.X + i, (int)arena.arenaTopL.Y + j].wallColor();
+                        if (color == bluePaintID)
+                        {
+                            blueBunkerCount = 1;
+                        }
+                        if (color == redPaintID)
+                        {
+                            redBunkerCount = 1;
+                        }
+                    }
+                }
+            }
+            if (blueBunkerCount == 0 && redBunkerCount == 0)
+            {
+                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
+                {
+                    file.Write("BEEP BOOP ALERT ALERT WHOOPSIES HAPPENED");
+                    foreach (string blarg in log)
+                        file.Write(blarg);
+                }
+                return;
+            }
+            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
+            {
+                file.Write("Game has ended smoothly?");
+                foreach (string blarg in log)
+                    file.Write(blarg);
+            }
             Refill();
             end = DateTime.Now;
             TimeSpan elapsed = end - start;
-            Arena arena = _arenas[arenaIndex];
             GameInProgress = "none";
             scoreCheck.Enabled = false;
             foreach (TSPlayer player in redTeam)
@@ -1985,6 +2039,8 @@ namespace ClassWars
                     {
                         if (c.name == name)
                         {
+                            c.maxHealth = player.PlayerData.maxHealth;
+                            c.maxMana = player.PlayerData.maxMana;
                             class_db.UpdateClass(c);
                             classes.Clear();
                             class_db.LoadClasses(ref classes);
