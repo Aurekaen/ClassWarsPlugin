@@ -28,6 +28,7 @@ namespace ClassWars
 
         #region variables
         public static Dictionary<string, int> Colors = new Dictionary<string, int>();
+        public bool realWin = false;
         private static Database arena_db;
         private static ClassDatabase class_db;
         private static List<Classvar> classes = new List<Classvar>();
@@ -150,6 +151,8 @@ namespace ClassWars
                 {
                     TShock.Players[args.Msg.whoAmI].Teleport(_arenas[arenaIndex].rSpawn.X * 16, _arenas[arenaIndex].rSpawn.Y * 16);
                     TShock.Players[args.Msg.whoAmI].Heal(600);
+                    TShock.Players[args.Msg.whoAmI].PlayerData.mana = TShock.Players[args.Msg.whoAmI].PlayerData.maxMana;
+                    NetMessage.SendData(42, args.Msg.whoAmI, -1, NetworkText.Empty, args.Msg.whoAmI, 0f, 0f, 0f, 0);
                     redDeathCount = redDeathCount + 1;
                     return;
                 }
@@ -157,6 +160,8 @@ namespace ClassWars
                 {
                     TShock.Players[args.Msg.whoAmI].Teleport(_arenas[arenaIndex].bSpawn.X * 16, _arenas[arenaIndex].bSpawn.Y * 16);
                     TShock.Players[args.Msg.whoAmI].Heal(600);
+                    TShock.Players[args.Msg.whoAmI].PlayerData.mana = TShock.Players[args.Msg.whoAmI].PlayerData.maxMana;
+                    NetMessage.SendData(42, args.Msg.whoAmI, -1, NetworkText.Empty, args.Msg.whoAmI, 0f, 0f, 0f, 0);
                     blueDeathCount = blueDeathCount + 1;
                     return;
                 }
@@ -1070,14 +1075,18 @@ namespace ClassWars
                 Item i = TShock.Utils.GetItemById(a.item);
                 if (a.count <= 0)
                 {
+                    int itemAmount = 0;
                     int stackSize = ItemCount(a.player, i);
+                    if (stackSize + a.quantity > a.maxCount)
+                        itemAmount = a.maxCount - a.quantity;
+                    else
+                        itemAmount = a.quantity;
                     if (stackSize < a.maxCount)
                     {
                         if (a.player.InventorySlotAvailable || (i.type > 70 && i.type < 75) || i.ammo > 0 || i.type == 58 || i.type == 184 && a.quantity != 0)
-                        {
-                            a.player.GiveItem(i.type, i.Name, i.width, i.height, a.quantity, a.prefix); 
-                        }
+                            a.player.GiveItem(i.type, i.Name, i.width, i.height, itemAmount, a.prefix);
                     }
+                    else count = 0;
                 }
                 else
                 {
@@ -1221,10 +1230,6 @@ namespace ClassWars
             Arena arena = _arenas[arenaIndex];
             blueBunkerCount = 0;
             redBunkerCount = 0;
-            TimeSpan currentTime = System.DateTime.Now - start;
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
-                file.WriteLine(arena.name + arena.arenaTopL + arena.arenaBottomR + "|||" + currentTime.Hours + " hours, " + currentTime . Minutes + " minutes, " + currentTime.Seconds + "seconds.");
-            log.Clear();
             for (int i = 0; i <= arena.arenaBottomR.X - arena.arenaTopL.X; i++)
             {
                 for (int j = 0; j <= arena.arenaBottomR.Y - arena.arenaTopL.Y; j++)
@@ -1237,26 +1242,43 @@ namespace ClassWars
                         if (color == bluePaintID)
                         {
                             blueBunkerCount = 1;
-                            log.Add("BlueAdd: " + "x: " + ((int)arena.arenaTopL.X + i).ToString() + ", y: " + ((int)arena.arenaTopL.Y + j).ToString() + ", color: " + color + ", type: " + tile);
                         }
                         if (color == redPaintID)
                         {
                             redBunkerCount = 1;
-                            log.Add("RedAdd: " + "x: " + ((int)arena.arenaTopL.X + i).ToString() + ", y: " + ((int)arena.arenaTopL.Y + j).ToString() + ", color: " + color + ", type: " + tile);
                         }
                     }
                 }
             }
             if (blueBunkerCount == 0)
             {
-                gameEnd(true);
-                return;
+                if (realWin)
+                {
+                    gameEnd(true);
+                    return;
+                }
+                else
+                {
+                    realWin = true;
+                    Task.Delay(100).ContinueWith(t => CheckWins());
+                    return;
+                }
             }
             if (redBunkerCount == 0)
             {
-                gameEnd(false);
-                return;
+                if (realWin)
+                {
+                    gameEnd(false);
+                    return;
+                }
+                else
+                {
+                    realWin = true;
+                    Task.Delay(100).ContinueWith(t => CheckWins());
+                    return;
+                }
             }
+            realWin = false;
         }
 
         private void gameEnd (bool winner)
@@ -1284,19 +1306,7 @@ namespace ClassWars
             }
             if (blueBunkerCount == 0 && redBunkerCount == 0)
             {
-                using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
-                {
-                    file.Write("BEEP BOOP ALERT ALERT WHOOPSIES HAPPENED");
-                    foreach (string blarg in log)
-                        file.Write(blarg);
-                }
                 return;
-            }
-            using (System.IO.StreamWriter file = new System.IO.StreamWriter(@"C:\Users\asueh\Documents\My Games\Games\Servers\TShock CW 1.3.5.3 4.3.24 - Copy\tshock\" + fileName))
-            {
-                file.Write("Game has ended smoothly?");
-                foreach (string blarg in log)
-                    file.Write(blarg);
             }
             Refill();
             end = DateTime.Now;
@@ -1333,6 +1343,7 @@ namespace ClassWars
             TShock.Utils.Broadcast("Red Team Deaths: " + redDeathCount.ToString(), winningTeam);
             TShock.Utils.Broadcast("Blue Team Deaths: " + blueDeathCount.ToString(), winningTeam);
             TShock.Utils.Broadcast("Total Game Time: " + elapsed.Hours + " Hours, " + elapsed.Minutes + " Minutes, " + elapsed.Seconds+ " Seconds.", winningTeam);
+            TShock.Utils.Broadcast("Total CPU ticks:" + elapsed.Ticks, winningTeam);
             TShock.Utils.Broadcast("=====================", winningTeam);
             tempClasses.Clear();
             gameClasses.Clear();
