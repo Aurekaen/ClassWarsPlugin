@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using TShockAPI;
 
 namespace ClassWars
@@ -54,6 +52,7 @@ namespace ClassWars
             Buff b = new Buff(0, 0);
             string[] c;
             int d, e;
+
             foreach (string s in a)
             {
                 c = s.Split('|');
@@ -67,6 +66,7 @@ namespace ClassWars
             }
             return temp;
         }
+
         public static string ItemBuffBlob(List<ItemBuff> x)
         {
             List<string> a = new List<string>();
@@ -121,7 +121,7 @@ namespace ClassWars
             foreach (string s in a)
             {
                 c = s.Split('|');
-                if (int.TryParse(c[0], out d) && int.TryParse(c[1], out e) && int.TryParse(c[2], out f) && int.TryParse(c[2], out g) && int.TryParse(c[2], out h))
+                if (int.TryParse(c[0], out d) && int.TryParse(c[1], out e) && int.TryParse(c[2], out f) && int.TryParse(c[3], out g) && int.TryParse(c[4], out h))
                 {
                     b.refresh = d;
                     b.item = e;

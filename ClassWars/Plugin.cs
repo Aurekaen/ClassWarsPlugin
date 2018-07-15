@@ -1078,19 +1078,23 @@ namespace ClassWars
                     int itemAmount = 0;
                     int stackSize = ItemCount(a.player, i);
                     if (stackSize + a.quantity > a.maxCount)
-                        itemAmount = a.maxCount - a.quantity;
-                    else
-                        itemAmount = a.quantity;
-                    if (stackSize < a.maxCount)
                     {
-                        if (a.player.InventorySlotAvailable || (i.type > 70 && i.type < 75) || i.ammo > 0 || i.type == 58 || i.type == 184 && a.quantity != 0)
-                            a.player.GiveItem(i.type, i.Name, i.width, i.height, itemAmount, a.prefix);
+                        itemAmount = Math.Max(a.maxCount - stackSize, 0);
                     }
-                    else count = 0;
+                    else
+                    {
+                        itemAmount = a.quantity;
+                    }
+                    if ((a.player.InventorySlotAvailable || (i.type > 70 && i.type < 75) || i.ammo > 0 || i.type == 58 || i.type == 184) && itemAmount != 0)
+                    {
+                        a.player.GiveItem(i.type, i.Name, i.width, i.height, itemAmount, a.prefix);
+                        a.count = a.refresh;
+                    }
+                    else a.count = 0;
                 }
                 else
                 {
-                    count--;
+                    a.count--;
                 }
             }
         }
@@ -1154,6 +1158,7 @@ namespace ClassWars
             TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 25 => wall = 190");
             TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 117 => wall = 200");
             TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 203 => wall = 195");
+            TShockAPI.Commands.HandleCommand(TSPlayer.Server, "//set 162 => wall = 71");
         }
 
         public void ResetSection()
